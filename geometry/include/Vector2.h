@@ -14,13 +14,13 @@ public:
 
     Vector2(const Vector2<T> &other) noexcept;
 
-    Vector2(Vector2 &&other) = delete;
+    Vector2(Vector2 &&other) = default;
 
     ~Vector2() noexcept = default;
 
     Vector2<T> &operator=(const Vector2<T> &other) noexcept;
 
-    Vector2<T> &operator=(Vector2 &&other) = delete;
+    Vector2<T> &operator=(Vector2 &&other) = default;
 
     Vector2<T> operator+(Vector2<T> other) const noexcept;
     Vector2<T> operator-(Vector2<T> other) const noexcept;
