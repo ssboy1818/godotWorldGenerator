@@ -11,7 +11,8 @@ add_executable(worldgen main.cpp
     geometry/include/Edge.h
     geometry/include/Polygon.h
     geometry/include/Id.h
-    geometry/include/Vertex.h)
+    geometry/include/Vertex.h
+    geometry/include/Circle.h)
 
 include(GNUInstallDirs)
 install(TARGETS worldgen
