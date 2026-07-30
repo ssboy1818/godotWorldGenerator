@@ -8,7 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(worldgen main.cpp
     geometry/include/Vector2.h
     geometry/include/Site.h
-    geometry/include/Edge.h)
+    geometry/include/Edge.h
+    geometry/include/Polygon.h
+    geometry/include/Id.h
+    geometry/include/Vertex.h)
 
 include(GNUInstallDirs)
 install(TARGETS worldgen

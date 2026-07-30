@@ -1,9 +1,7 @@
 #pragma once
 
 #include "Vector2.h"
-
-using SiteId = ssize_t;
-inline constexpr SiteId INVALID_SITE_ID = -1;
+#include "Id.h"
 
 namespace {
 
@@ -52,7 +50,7 @@ inline Site::Site(const Site &other) noexcept
 
 inline Site::Site(Site &&other) noexcept
     : id(other.id), position(other.position) {
-    other.id = INVALID_SITE_ID;
+    other.id = INVALID_ID;
     other.position = {0, 0};
 }
 
@@ -71,7 +69,7 @@ inline Site &Site::operator=(Site &&other) noexcept {
     id = other.id;
     position = other.position;
 
-    other.id = INVALID_SITE_ID;
+    other.id = INVALID_ID;
     other.position = {0, 0};
 
     return *this;
