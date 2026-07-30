@@ -2,10 +2,13 @@
 
 #include "Vector2.h"
 
+using SiteId = ssize_t;
+inline constexpr SiteId INVALID_SITE_ID = -1;
+
 namespace {
 
-inline static std::size_t newId() noexcept {
-    static std::size_t id_ = 1;
+inline static SiteId newId() noexcept {
+    static SiteId id_ = 0;
     return id_++;
 }
 
@@ -13,7 +16,7 @@ inline static std::size_t newId() noexcept {
 
 class Site {
 public:
-    std::size_t id{newId()};
+    SiteId id{newId()};
     Vector2d position;
 
 public:
@@ -49,7 +52,7 @@ inline Site::Site(const Site &other) noexcept
 
 inline Site::Site(Site &&other) noexcept
     : id(other.id), position(other.position) {
-    other.id = 0;
+    other.id = INVALID_SITE_ID;
     other.position = {0, 0};
 }
 
@@ -68,7 +71,7 @@ inline Site &Site::operator=(Site &&other) noexcept {
     id = other.id;
     position = other.position;
 
-    other.id = 0;
+    other.id = INVALID_SITE_ID;
     other.position = {0, 0};
 
     return *this;
