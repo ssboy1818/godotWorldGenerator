@@ -51,7 +51,7 @@ public:
     explicit operator Vector2<double>() const noexcept;
 
     [[nodiscard]] double length() const noexcept;
-
+    [[nodiscard]] double squaredLength() const noexcept;
 };
 
 using Vector2d = Vector2<double>;
@@ -221,5 +221,10 @@ inline Vector2<T>::operator Vector2<double>() const noexcept {
 
 template<class T>
 inline double Vector2<T>::length() const noexcept {
-    std::hypot(x, y);
+    return std::hypot(x, y);
+}
+
+template<class T>
+inline double Vector2<T>::squaredLength() const noexcept {
+    return x*x + y*y;
 }
