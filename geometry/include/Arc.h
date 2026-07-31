@@ -9,12 +9,9 @@ public:
     Vector2d topLimit;
 
 public:
-    Arc() noexcept = default;
+    explicit Arc(SiteId site) noexcept : focus(site) {};
 
     bool operator<(const Arc &other) const noexcept {
-        if ((topLimit.x < other.topLimit.x) ||
-            (topLimit.x == other.topLimit.x && topLimit.y < other.topLimit.y))
-            return true;
-        return false;
+        return topLimit < other.topLimit;
     };
 };

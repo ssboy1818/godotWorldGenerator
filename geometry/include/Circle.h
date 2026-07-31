@@ -20,6 +20,8 @@ public:
 
     [[nodiscard]] Vector2d center() const noexcept;
 
+    [[nodiscard]] double radius() const noexcept;
+
 private:
     std::array<Vector2d, 3> m_vertices;
     Vector2d m_center;
@@ -31,6 +33,14 @@ private:
 inline Circle::Circle(Vector2d p1, Vector2d p2, Vector2d p3)
     : m_vertices({p1, p2, p3}) {
     calculateCenter();
+}
+
+inline Vector2d Circle::center() const noexcept {
+    return m_center;
+}
+
+inline double Circle::radius() const noexcept {
+    return (m_center - m_vertices[0]).length();
 }
 
 inline void Circle::calculateCenter() {

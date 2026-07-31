@@ -2,7 +2,6 @@
 
 #include "Circle.h"
 #include "Id.h"
-#include "Site.h"
 
 enum class EventType {
     Circle, Site
@@ -25,19 +24,20 @@ private:
 
 class SiteEvent : public Event {
 public:
-    SiteEvent(const Site &site) noexcept
-        : Event(EventType::Site), m_site(site) {};
+    SiteEvent(SiteId site, Vector2d position) noexcept
+        : Event(EventType::Site), m_site(site), m_position(position) {};
 
     SiteId site() const noexcept {
-        return m_site.id;
+        return m_site;
     };
 
     Vector2d position() const noexcept {
-        return m_site.position;
+        return m_position;
     };
 
 private:
-    Site m_site;
+    SiteId m_site{INVALID_ID};
+    Vector2d m_position;
 };
 
 class CircleEvent : public Event {
@@ -68,6 +68,7 @@ private:
     bool m_valid{true};
 };
 
+// Implementation
 
 inline bool Event::operator<(const Event &other) const noexcept  {
     if (m_type == EventType::Circle && other.m_type == EventType::Site)
@@ -78,14 +79,11 @@ inline bool Event::operator<(const Event &other) const noexcept  {
     if (m_type == EventType::Site) {
         auto lhs = static_cast<const SiteEvent *>(this);
         auto rhs = static_cast<const SiteEvent *>(&other);
-        return lhs < rhs;
+        return lhs->position() < rhs->position();
     } else {
         auto lhs = static_cast<const CircleEvent *>(this)->circle().center();
         auto rhs = static_cast<const CircleEvent *>(&other)->circle().center();
 
-        if ((lhs.x < rhs.x) ||
-            (lhs.x == rhs.x && lhs.y < rhs.y))
-            return true;
-        return false;
+        return lhs < rhs;
     }
 };

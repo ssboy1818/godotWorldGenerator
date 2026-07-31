@@ -11,17 +11,19 @@ public:
 
     bool empty() const noexcept;
 
-    Event pop();
+    Event *pop();
+
+    void add(Event *event);
 
 private:
-    std::priority_queue<Event> m_queue;
+    std::priority_queue<Event *> m_queue;
 };
 
 inline bool EventQueue::empty() const noexcept {
     return m_queue.empty();
 }
 
-inline Event EventQueue::pop() {
+inline Event *EventQueue::pop() {
     if (empty())
         throw std::runtime_error("Очередь пуста.");
 
@@ -29,4 +31,8 @@ inline Event EventQueue::pop() {
     m_queue.pop();
 
     return event;
+}
+
+inline void EventQueue::add(Event *event) {
+    m_queue.push(event);
 }

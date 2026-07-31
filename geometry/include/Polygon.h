@@ -4,5 +4,6 @@
 
 struct Polygon {
     PolygonId id {INVALID_ID};
-    EdgeId egde;
+    SiteId site{INVALID_ID};
+    EdgeId edge{INVALID_ID};
 };

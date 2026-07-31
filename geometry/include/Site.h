@@ -3,24 +3,15 @@
 #include "Vector2.h"
 #include "Id.h"
 
-namespace {
-
-inline static SiteId newId() noexcept {
-    static SiteId id_ = 0;
-    return id_++;
-}
-
-} // namespace
-
 class Site {
 public:
-    SiteId id{newId()};
+    SiteId id{INVALID_ID};
     Vector2d position;
 
 public:
     Site() noexcept = default;
     Site(double x, double y) noexcept;
-    Site(Vector2d position_) noexcept;
+    explicit Site(Vector2d position_) noexcept;
 
     Site(const Site &other) noexcept;
 
@@ -76,22 +67,13 @@ inline Site &Site::operator=(Site &&other) noexcept {
 }
 
 inline bool Site::operator<(const Site &other) const noexcept {
-    if ((position.x < other.position.x) ||
-        (position.x == other.position.x && position.y < other.position.y))
-        return true;
-    return false;
+    return position < other.position;
 }
 
 inline bool Site::operator>(const Site &other) const noexcept {
-    if ((position.x > other.position.x) ||
-        (position.x == other.position.x && position.y > other.position.y))
-        return true;
-    return false;
+    return position > other.position;
 }
 
 inline bool Site::operator==(const Site &other) const noexcept {
-    return position.x == other.position.x
-        && position.y == other.position.y;
+    return position == other.position;
 }
-
-

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <tuple>
 
 template <class T>
 class Vector2 {
@@ -191,17 +192,17 @@ inline Vector2<T> &Vector2<T>::operator/=(T value) noexcept {
 
 template<class T>
 inline bool Vector2<T>::operator<(Vector2<T> other) const noexcept {
-    return length() < other.length();
+    return std::tie(x, y) < std::tie(other.x, other.y);
 }
 
 template<class T>
 inline bool Vector2<T>::operator>(Vector2<T> other) const noexcept {
-    return length() > other.length();
+    return other < *this;
 }
 
 template<class T>
 inline bool Vector2<T>::operator==(Vector2<T> other) const noexcept {
-    return length() == other.length();
+    return std::tie(x, y) == std::tie(other.x, other.y);
 }
 
 template<class T>

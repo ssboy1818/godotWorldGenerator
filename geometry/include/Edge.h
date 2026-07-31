@@ -1,21 +1,21 @@
 #pragma once
 
-#include "Vector2.h"
 #include "Id.h"
 
 class Edge {
 public:
-    Vector2d origin;
+    EdgeId id{INVALID_ID};
+    VertexId origin{INVALID_ID};
     EdgeId twin{INVALID_ID};
     EdgeId prev{INVALID_ID};
     EdgeId next{INVALID_ID};
     PolygonId face{INVALID_ID};
 
 public:
-    Edge(Vector2d origin_) noexcept;
+    explicit Edge(VertexId origin_, PolygonId face_ = INVALID_ID) noexcept;
 };
 
 // Implementation
 
-inline Edge::Edge(Vector2d origin_) noexcept
-    : origin(origin_) {}
+inline Edge::Edge(VertexId origin_, PolygonId face_) noexcept
+    : origin(origin_), face(face_) {}
