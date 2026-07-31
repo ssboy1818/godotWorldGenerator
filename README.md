@@ -24,6 +24,22 @@ With a Godot 4.4 executable available, run the engine-level smoke test with:
 godot --headless --path demo --script res://smoke_test.gd
 ```
 
+You can also give CMake the editor path and use the provided run targets:
+
+```sh
+cmake -S . -B build \
+    -DWORLDGEN_GODOT_EXECUTABLE=/path/to/godot \
+    -DGODOTCPP_TARGET=template_debug
+cmake --build build --target worldgen_editor
+cmake --build build --target worldgen_smoke
+```
+
+The project itself builds a shared library, not an executable. In Qt Creator, set
+the Custom Executable run configuration to the Godot 4.4 executable, use
+`--editor --path %{sourceDir}/demo` as its arguments, and select `demo` as the
+working directory. The `worldgen_editor` CMake target provides the same launch
+without an IDE run configuration.
+
 For a release build:
 
 ```sh

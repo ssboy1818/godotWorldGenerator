@@ -27,7 +27,7 @@ get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
 get_target_property(GODOTCPP_SYMBOL_VISIBILITY godot-cpp CXX_VISIBILITY_PRESET)
 
 set(WORLDGEN_GODOT_ADDON_DIR
-    "${CMAKE_SOURCE_DIR}/demo/addons/worldgen"
+    "${WORLDGEN_GODOT_PROJECT_DIR}/addons/worldgen"
     CACHE PATH
     "Directory containing the loadable Worldgen Godot addon"
 )
