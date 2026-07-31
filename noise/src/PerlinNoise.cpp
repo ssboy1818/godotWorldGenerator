@@ -55,8 +55,6 @@ double gradientDot(std::int64_t x, std::int64_t y, double offsetX, double offset
 
 namespace noise {
 
-std::uint64_t seed = 0;
-
 double perlinNoise(Vector2d pos, bool normalized) noexcept {
     if (!std::isfinite(pos.x) || !std::isfinite(pos.y))
         return std::numeric_limits<double>::quiet_NaN();
@@ -89,7 +87,7 @@ double perlinNoise(Vector2d pos, bool normalized) noexcept {
     return std::clamp((value + 1.0) * 0.5, 0.0, 1.0);
 }
 
-double egdeDecay(const BoundingBox &worldBounds,
+double edgeDecay(const BoundingBox &worldBounds,
                  Vector2d decayRadius,
                  double x,
                  double y) noexcept {
@@ -104,13 +102,6 @@ double egdeDecay(const BoundingBox &worldBounds,
     const auto xMask = std::clamp(1.0 - distanceX / decayRadius.x, 0.0, 1.0);
     const auto yMask = std::clamp(1.0 - distanceY / decayRadius.y, 0.0, 1.0);
     return std::max(xMask, yMask);
-}
-
-double edgeDecay(const BoundingBox &worldBounds,
-                 Vector2d decayRadius,
-                 double x,
-                 double y) noexcept {
-    return egdeDecay(worldBounds, decayRadius, x, y);
 }
 
 };
