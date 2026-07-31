@@ -17,7 +17,9 @@ add_executable(worldgen main.cpp
     geometry/include/Circle.h
     geometry/include/DCEL.h
     voronoi/include/Event.h
-    voronoi/include/EventQueue.h)
+    voronoi/include/EventQueue.h
+    geometry/include/Arc.h
+    voronoi/include/BeachLine.h)
 
 include(GNUInstallDirs)
 install(TARGETS worldgen
