@@ -1,0 +1,196 @@
+#include "WorldgenSettings.h"
+
+#include <godot_cpp/core/class_db.hpp>
+
+namespace worldgen {
+
+void WorldgenSettings::_bind_methods() {
+    godot::ClassDB::bind_method(godot::D_METHOD("set_bounds", "bounds"),
+                                &WorldgenSettings::setBounds);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_bounds"),
+                                &WorldgenSettings::bounds);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_seed", "seed"),
+                                &WorldgenSettings::setSeed);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_seed"),
+                                &WorldgenSettings::seed);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_columns", "columns"),
+                                &WorldgenSettings::setColumns);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_columns"),
+                                &WorldgenSettings::columns);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_rows", "rows"),
+                                &WorldgenSettings::setRows);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_rows"),
+                                &WorldgenSettings::rows);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_jitter", "jitter"),
+                                &WorldgenSettings::setJitter);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_jitter"),
+                                &WorldgenSettings::jitter);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_sea_level", "sea_level"),
+                                &WorldgenSettings::setSeaLevel);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_sea_level"),
+                                &WorldgenSettings::seaLevel);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_edge_decay_ratio", "ratio"),
+                                &WorldgenSettings::setEdgeDecayRatio);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_edge_decay_ratio"),
+                                &WorldgenSettings::edgeDecayRatio);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_noise_octaves", "octaves"),
+                                &WorldgenSettings::setNoiseOctaves);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_noise_octaves"),
+                                &WorldgenSettings::noiseOctaves);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_noise_frequency", "frequency"),
+                                &WorldgenSettings::setNoiseFrequency);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_noise_frequency"),
+                                &WorldgenSettings::noiseFrequency);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_noise_lacunarity", "lacunarity"),
+                                &WorldgenSettings::setNoiseLacunarity);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_noise_lacunarity"),
+                                &WorldgenSettings::noiseLacunarity);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_noise_persistence", "persistence"),
+                                &WorldgenSettings::setNoisePersistence);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_noise_persistence"),
+                                &WorldgenSettings::noisePersistence);
+
+    ADD_GROUP("World", "");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::RECT2, "bounds"),
+                 "set_bounds", "get_bounds");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT, "seed"),
+                 "set_seed", "get_seed");
+
+    ADD_GROUP("Sites", "");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "columns",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "1,4096,1,or_greater"),
+                 "set_columns", "get_columns");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "rows",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "1,4096,1,or_greater"),
+                 "set_rows", "get_rows");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "jitter",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.01"),
+                 "set_jitter", "get_jitter");
+
+    ADD_GROUP("Terrain", "");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "sea_level",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.001"),
+                 "set_sea_level", "get_sea_level");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::VECTOR2, "edge_decay_ratio"),
+                 "set_edge_decay_ratio", "get_edge_decay_ratio");
+
+    ADD_GROUP("Noise", "");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "noise_octaves",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "1,32,1,or_greater"),
+                 "set_noise_octaves", "get_noise_octaves");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "noise_frequency",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0.000001,1,0.000001,or_greater"),
+                 "set_noise_frequency", "get_noise_frequency");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "noise_lacunarity",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0.000001,8,0.001,or_greater"),
+                 "set_noise_lacunarity", "get_noise_lacunarity");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "noise_persistence",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.001,or_greater"),
+                 "set_noise_persistence", "get_noise_persistence");
+}
+
+void WorldgenSettings::setBounds(const godot::Rect2 &bounds) {
+    m_bounds = bounds;
+}
+
+godot::Rect2 WorldgenSettings::bounds() const {
+    return m_bounds;
+}
+
+void WorldgenSettings::setSeed(std::int64_t seed) {
+    m_seed = seed;
+}
+
+std::int64_t WorldgenSettings::seed() const noexcept {
+    return m_seed;
+}
+
+void WorldgenSettings::setColumns(std::int64_t columns) {
+    m_columns = columns;
+}
+
+std::int64_t WorldgenSettings::columns() const noexcept {
+    return m_columns;
+}
+
+void WorldgenSettings::setRows(std::int64_t rows) {
+    m_rows = rows;
+}
+
+std::int64_t WorldgenSettings::rows() const noexcept {
+    return m_rows;
+}
+
+void WorldgenSettings::setJitter(double jitter) {
+    m_jitter = jitter;
+}
+
+double WorldgenSettings::jitter() const noexcept {
+    return m_jitter;
+}
+
+void WorldgenSettings::setSeaLevel(double seaLevel) {
+    m_seaLevel = seaLevel;
+}
+
+double WorldgenSettings::seaLevel() const noexcept {
+    return m_seaLevel;
+}
+
+void WorldgenSettings::setEdgeDecayRatio(const godot::Vector2 &ratio) {
+    m_edgeDecayRatio = ratio;
+}
+
+godot::Vector2 WorldgenSettings::edgeDecayRatio() const {
+    return m_edgeDecayRatio;
+}
+
+void WorldgenSettings::setNoiseOctaves(std::int64_t octaves) {
+    m_noiseOctaves = octaves;
+}
+
+std::int64_t WorldgenSettings::noiseOctaves() const noexcept {
+    return m_noiseOctaves;
+}
+
+void WorldgenSettings::setNoiseFrequency(double frequency) {
+    m_noiseFrequency = frequency;
+}
+
+double WorldgenSettings::noiseFrequency() const noexcept {
+    return m_noiseFrequency;
+}
+
+void WorldgenSettings::setNoiseLacunarity(double lacunarity) {
+    m_noiseLacunarity = lacunarity;
+}
+
+double WorldgenSettings::noiseLacunarity() const noexcept {
+    return m_noiseLacunarity;
+}
+
+void WorldgenSettings::setNoisePersistence(double persistence) {
+    m_noisePersistence = persistence;
+}
+
+double WorldgenSettings::noisePersistence() const noexcept {
+    return m_noisePersistence;
+}
+
+} // namespace worldgen

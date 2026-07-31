@@ -1,0 +1,13 @@
+; Engine configuration file.
+; This project exists to load and exercise the Worldgen GDExtension.
+
+config_version=5
+
+[application]
+
+config/name="Worldgen GDExtension"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

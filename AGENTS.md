@@ -2,24 +2,23 @@
 
 ## Project mission
 
-Worldgen is intended to become a Godot 4 GDExtension that procedurally generates a
+Worldgen is a Godot 4 GDExtension that procedurally generates a
 bounded two-dimensional world and partitions it into Voronoi cells. Each cell is a
 gameplay region with geometry and generated properties such as elevation and
-land/water classification. Godot should eventually be able to request a seeded
-world, inspect its cells and their relationships, and use the result to build
+land/water classification. Godot can request a seeded world, inspect its cells and
+their relationships, and use the result to build
 meshes, maps, navigation, simulation, or editor previews.
 
-The repository is currently the engine-independent C++ prototype of that system.
-It can generate a world and write an SVG preview, but it does **not** yet contain
-`godot-cpp`, GDExtension entry points, Godot classes, an extension manifest, or a
-Godot demo project. Keep this distinction explicit in documentation and code
-reviews: Godot integration is the primary goal, not an existing feature.
+The repository contains engine-independent C++ core libraries and a thin Godot 4.4
+binding layer. The binding registers settings, synchronous generation, immutable
+packed result data, and a `Node2D` facade. It does not yet render the generated
+world or provide a complete visualization demo.
 
 ## Current generation pipeline
 
-The executable in `main.cpp` demonstrates the complete pipeline that exists now:
+`VoronoiWorldGenerator::generate()` invokes the complete pipeline:
 
-1. Construct a `BoundingBox` for the finite world.
+1. Convert and validate a `WorldgenSettings` resource into core settings.
 2. Use `JitteredGridSiteGenerator` to place one seed point in each grid slot.
 3. Pass those sites to `Fortune`, which performs a Fortune-style sweep and builds
    Voronoi topology in a `DCEL`.
@@ -29,9 +28,8 @@ The executable in `main.cpp` demonstrates the complete pipeline that exists now:
    elevation approaches zero near the world border.
 6. Build one `Region` per polygon and classify it as land or water according to
    `WorldGenerationSettings::seaLevel`.
-7. Return an immutable `World` containing the bounds, diagram, and regions.
-8. The prototype executable writes those regions to `voronoi.svg` and, in debug
-   builds, prints timing and geometry counts.
+7. Return an immutable core `World` containing the bounds, diagram, and regions.
+8. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
 
 The generator is deterministic when its settings are fixed. A single explicit
 `WorldGenerationSettings::seed` controls both jittered site placement and terrain
@@ -69,8 +67,8 @@ Construction of the bounded Voronoi diagram.
 - `Fortune.cpp` handles sweep events, completes unbounded bisectors at the world
   boundary, and constructs bounded polygon vertex loops.
 
-`Polygon::vertices` is currently the authoritative cell outline for consumers and
-SVG rendering. The final bounding/clipping pass adds polygon vertices but does not
+`Cell::vertices` is currently the authoritative cell outline for consumers. The
+final bounding/clipping pass adds polygon vertices but does not
 turn every clipped boundary segment into a fully linked DCEL half-edge cycle.
 Consequently, do not assume that walking `Edge::next` visits the same complete
 boundary as `Polygon::vertices` until that invariant is deliberately implemented
@@ -110,53 +108,64 @@ The dependency direction is intentional:
 
 ```text
 geometry <- voronoi ----\
-    ^                     >- terrain <- prototype executable
+    ^                     >- terrain <- Godot bindings
     +------- noise ------/
 ```
 
-Keep the core independent from Godot. Future bindings should depend on these
-libraries and convert their values at the boundary; geometry, Voronoi, noise, and
+Keep the core independent from Godot. Bindings depend on these libraries and
+convert their values at the boundary; geometry, Voronoi, noise, and
 terrain code must not depend on Godot headers or engine object lifetimes.
+
+### `godot/`
+
+The GDExtension adapter and registration layer.
+
+- `WorldgenSettings` is a `Resource` with Inspector-editable generation inputs.
+- `VoronoiWorldGenerator` is a `RefCounted` synchronous generation service.
+- `VoronoiWorldData` is a read-only `RefCounted` result with packed arrays.
+- `VoronoiWorld2D` is a scene-instantiable `Node2D` facade over the service.
+- `RegisterTypes.cpp` exports `worldgen_library_init` and registers all four
+  classes at scene initialization level.
+
+Godot-facing code may depend on the core, but the reverse dependency is forbidden.
 
 ### Root files
 
-- `CMakeLists.txt` builds the four layers and the `worldgen` prototype executable.
-- `main.cpp` is a smoke-test/demo program and SVG exporter, not the eventual Godot
-  entry point.
-- `voronoi.svg`, build trees, IDE metadata, and compiled outputs are generated
+- `CMakeLists.txt` builds the core layers, `godot-cpp`, and the shared
+  `worldgen_extension` target.
+- `demo/addons/worldgen/worldgen.gdextension` is the Godot 4.4 extension manifest.
+- `demo/project.godot` is a minimal project that loads the extension.
+- Build trees, IDE metadata, and compiled outputs are generated
   artifacts and must not be committed.
 
 ## Build and verification
 
-The current project requires CMake 3.16+ and a C++23 compiler/standard library.
-The debug executable uses `<print>`, so the standard library must implement that
-C++23 header.
+The current project requires CMake 3.17+, a C++23 compiler/standard library, and
+the `godot-cpp` submodule on its 4.4 branch.
 
 Configure and build out of source:
 
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+git submodule update --init --recursive
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DGODOTCPP_TARGET=template_debug
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure
 ```
 
-Run the prototype from the directory in which `voronoi.svg` should be created:
-
-```sh
-./build/worldgen
-```
+The debug library is written to `demo/addons/worldgen/bin/` and is loaded by the
+manifest when the `demo/` project is opened in a compatible Godot editor.
 
 For an optimized performance check:
 
 ```sh
-cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+    -DGODOTCPP_TARGET=template_release
 cmake --build build-release --parallel
-./build-release/worldgen
 ```
 
-The `worldgen_generation_tests` CTest target covers unified-settings validation,
-seeded repeatability, and basic generated-world invariants. Continue adding
-focused tests rather than treating the generated SVG as sufficient validation.
+`demo/smoke_test.gd` provides an engine-level registration, packed-data, and
+determinism smoke test. There is not yet a C++ unit-test target or automated CI;
+continue adding focused coverage rather than treating a successful shared-library
+build as sufficient behavioral validation.
 
 When changing generation code, verify at least:
 
@@ -183,14 +192,15 @@ Recommended layers:
 1. **Core libraries:** the existing `geometry`, `voronoi`, `noise`, and `terrain`
    targets, with no Godot dependency.
 2. **GDExtension bindings:** registration/initialization plus Godot-facing classes
-   that translate settings and generated results.
+   that translate settings and generated results. This initial layer exists.
 3. **Packaging:** the native library, `.gdextension` file, platform-specific build
-   outputs, and any editor plugin metadata.
-4. **Demo/tests:** a minimal Godot project that requests a deterministic world and
-   draws all cell polygons, plus C++ unit/integration tests.
+   outputs, and any editor plugin metadata. The descriptor and local build layout
+   exist; supported-platform release packaging remains future work.
+4. **Demo/tests:** the minimal Godot project currently loads the extension but does
+   not yet draw cell polygons or provide engine-level automated tests.
 
-A practical initial Godot API should expose a generator object and a read-only
-result object. The exact class names are not fixed yet, but the API must cover:
+The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
+`VoronoiWorldData`, and `VoronoiWorld2D`. It covers:
 
 - bounds or world size;
 - site columns/rows or another site-placement strategy;
@@ -260,25 +270,24 @@ standalone SVG exporter.
   is correct for the whole implementation.
 - Add source files to the owning subproject's `CMakeLists.txt`; expose dependencies
   through the existing `worldgen::<layer>` aliases.
-- Add or update tests with behavioral changes. A visual SVG check is useful for
+- Add or update tests with behavioral changes. Visual inspection is useful for
   diagnosis but is not a replacement for assertions.
 - Measure performance changes using fixed inputs and Release builds. Avoid
   optimizing at the cost of unverified geometry correctness.
-- Do not edit generated build trees, SVG output, or `.qtcreator` user files.
+- Do not edit generated build trees, native libraries, or `.qtcreator` user files.
 - Preserve unrelated user changes in a dirty working tree.
 
 ## Known gaps
 
 Do not describe the following as completed:
 
-- Godot/GDExtension integration and public engine-facing API;
 - comprehensive automated tests and CI;
-- exported cell adjacency as domain data;
 - a complete linked DCEL boundary for every clipped polygon;
 - documented handling of duplicate sites and all geometric degeneracies;
 - chunking, streaming, level of detail, erosion, climate, biomes, rivers, roads,
   settlements, or serialization;
-- stable performance/memory guarantees for production-sized worlds.
+- stable performance/memory guarantees for production-sized worlds;
+- a polygon-rendering Godot demo and supported-platform release packages.
 
 Those features may be added incrementally, but the essential product remains a
 reliable, deterministic Godot extension for worlds partitioned into bounded Voronoi
