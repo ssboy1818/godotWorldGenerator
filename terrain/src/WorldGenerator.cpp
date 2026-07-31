@@ -48,8 +48,7 @@ World WorldGenerator::generate(const BoundingBox &boundingBox) const {
     auto sites = m_siteGenerator->generateSites(boundingBox);
 
     Fortune fortune;
-    fortune.calculateVoronoi(sites, boundingBox);
-    auto diagram = fortune.takeDcel();
+    auto division = fortune.generate(sites, boundingBox);
 
     const Vector2d decayRadius{
         (boundingBox.max.x - boundingBox.min.x) * m_settings.edgeDecayRatio.x,
@@ -57,15 +56,14 @@ World WorldGenerator::generate(const BoundingBox &boundingBox) const {
     };
 
     std::vector<Region> regions;
-    regions.reserve(diagram.polygons().size());
-    for (const auto &cell : diagram.polygons()) {
-        const auto &site = diagram.site(cell.site);
-        const auto elevation = noise::noise(boundingBox, site.position, decayRadius,
+    regions.reserve(division.cells.size());
+    for (const auto &cell : division.cells) {
+        const auto elevation = noise::noise(boundingBox, cell.sitePosition, decayRadius,
                                             5, 0.01);
         regions.emplace_back(cell.id,
                              elevation,
                              m_settings.seaLevel);
     }
 
-    return World{boundingBox, std::move(diagram), std::move(regions)};
+    return World{boundingBox, std::move(division), std::move(regions)};
 }

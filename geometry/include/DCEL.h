@@ -30,7 +30,7 @@ public:
             this->site(site);
 
         const auto id = nextId(m_polygons);
-        m_polygons.push_back({id, site, INVALID_ID, {}});
+        m_polygons.push_back({id, site, INVALID_ID});
         return id;
     }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Polygon.h"
+#include "WorldDivision.h"
 
 enum class RegionType {
     Water,
@@ -9,14 +9,14 @@ enum class RegionType {
 
 class Region {
 public:
-    Region(PolygonId cell,
+    Region(CellId cell,
            double elevation,
            double seaLevel)
         : m_cell(cell),
           m_elevation(elevation),
           m_type(elevation < seaLevel ? RegionType::Water : RegionType::Land) {}
 
-    [[nodiscard]] PolygonId cell() const noexcept {
+    [[nodiscard]] CellId cell() const noexcept {
         return m_cell;
     }
 
@@ -37,7 +37,7 @@ public:
     }
 
 private:
-    PolygonId m_cell;
+    CellId m_cell;
     double m_elevation;
     RegionType m_type;
 };

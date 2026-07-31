@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <numeric>
 
 namespace {
 
@@ -31,15 +32,14 @@ void writeSvg(const World &world, std::ostream &output) {
     output << "  <g stroke=\"#334155\" stroke-width=\"1\" stroke-linejoin=\"round\">\n";
 
     for (const auto &region : world.regions()) {
-        const auto &cell = world.diagram().polygon(region.cell());
+        const auto &cell = world.division().cells[region.cell()];
         if (cell.vertices.size() < 3)
             continue;
 
         output << "    <polygon fill=\""
                << (region.isWater() ? "#38bdf8" : "#84cc16")
                << "\" points=\"";
-        for (const auto vertex : cell.vertices) {
-            const auto &point = world.diagram().vertex(vertex).position;
+        for (const auto &point : cell.vertices) {
             output << point.x << ',' << svgY(point.y, boundingBox) << ' ';
         }
         output << "\"/>\n";
@@ -55,7 +55,7 @@ void writeSvg(const World &world, std::ostream &output) {
 }
 
 int main() {
-    const BoundingBox boundingBox{{0.0, 0.0}, {1024.0, 1024.0}};
+    const BoundingBox boundingBox{{0.0, 0.0}, {2048.0, 2048.0}};
     auto siteGenerator = std::make_unique<JitteredGridSiteGenerator>(300, 300, 0.8);
     WorldGenerator worldGenerator{std::move(siteGenerator)};
 
@@ -66,13 +66,26 @@ int main() {
 #ifndef NDEBUG
     const auto elapsed = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - start);
-    const auto &dcel = world.diagram();
+    const auto &cells = world.division().cells;
     const auto width = boundingBox.max.x - boundingBox.min.x;
     const auto height = boundingBox.max.y - boundingBox.min.y;
-    const auto edgeCount = dcel.edges().size() / 2;
-    const auto timePerSite = dcel.sites().empty()
+    const auto polygonVertexCount = std::accumulate(
+        cells.begin(),
+        cells.end(),
+        std::size_t{0},
+        [](std::size_t total, const Cell &cell) {
+            return total + cell.vertices.size();
+        });
+    const auto neighborPairCount = std::accumulate(
+        cells.begin(),
+        cells.end(),
+        std::size_t{0},
+        [](std::size_t total, const Cell &cell) {
+            return total + cell.neighbors.size();
+        }) / 2;
+    const auto timePerSite = cells.empty()
                                  ? 0.0
-                                 : elapsed.count() / static_cast<double>(dcel.sites().size());
+                                 : elapsed.count() / static_cast<double>(cells.size());
     const auto waterCount = std::count_if(world.regions().begin(),
                                           world.regions().end(),
                                           [](const Region &region) {
@@ -84,17 +97,17 @@ int main() {
                "Sites: {}\n"
                "Land regions: {}\n"
                "Water regions: {}\n"
-               "Edges: {}\n"
-               "Vertices: {}\n"
+               "Neighbor pairs: {}\n"
+               "Polygon vertices: {}\n"
                "Time consumed: {:.3f} ms\n"
                "Time per site: {:.3f} ms\n",
                width,
                height,
-               dcel.sites().size(),
+               cells.size(),
                world.regions().size() - static_cast<std::size_t>(waterCount),
                waterCount,
-               edgeCount,
-               dcel.vertices().size(),
+               neighborPairCount,
+               polygonVertexCount,
                elapsed.count(),
                timePerSite);
 #endif

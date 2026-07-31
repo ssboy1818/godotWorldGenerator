@@ -1,44 +1,19 @@
 #pragma once
 
-#include "BeachLine.h"
 #include "BoundingBox.h"
-#include "DCEL.h"
-#include "EventQueue.h"
+#include "Site.h"
+#include "WorldDivision.h"
 
-#include <utility>
-#include <vector>
+#include <span>
 
 class Fortune {
 public:
     Fortune() noexcept = default;
 
-    void calculateVoronoi(const std::vector<Site> &sites,
-                          const BoundingBox &boundingBox);
-
-    const DCEL &dcel() const noexcept;
-    DCEL takeDcel() noexcept;
-
-private:
-    BeachLine m_beachline;
-    DCEL m_dcel;
-    EventQueue m_events;
-    std::vector<PolygonId> m_siteFaces;
-
-private:
-    void addSiteEvents(const std::vector<Site> &sites);
-
-    void handleSiteEvent(SiteEvent *event);
-    void handleCircleEvent(CircleEvent *event);
-
-    void checkCircleEvent(BeachLine::Node *node, double sweepLine);
-    void invalidateCircleEvent(BeachLine::Node *node);
-
-    PolygonId faceFor(SiteId site) const;
-    std::pair<EdgeId, EdgeId> createEdgePair(BeachLine::Node *left,
-                                             BeachLine::Node *right);
-    void setFaceBoundary(PolygonId face, EdgeId edge);
-
-    void finishOpenEdges(const BoundingBox &boundingBox);
-    void finishEdgePair(EdgeId edge, const BoundingBox &boundingBox);
-    VertexId boundaryVertex(Vector2d position);
+    // Sites at or below max(1e-10 * maximum box dimension,
+    // 64 * machine epsilon * coordinate scale) are rejected before the sweep.
+    // Cell IDs in the result correspond to indices in `sites`.
+    [[nodiscard]] WorldDivision generate(
+        std::span<const Site> sites,
+        const BoundingBox &boundingBox) const;
 };

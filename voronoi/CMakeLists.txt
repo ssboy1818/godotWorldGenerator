@@ -1,5 +1,6 @@
 add_library(worldgen_voronoi STATIC
     src/Fortune.cpp
+    src/SiteValidation.cpp
 )
 add_library(worldgen::voronoi ALIAS worldgen_voronoi)
 

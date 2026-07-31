@@ -1,69 +1,47 @@
 #include "Fortune.h"
 
+#include "BeachLine.h"
+#include "DCEL.h"
+#include "EventQueue.h"
+#include "NumericalPolicy.h"
+#include "SiteValidation.h"
+
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <memory>
 #include <numeric>
 #include <queue>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
-bool clipAxis(double origin,
-              double direction,
-              double minimum,
-              double maximum,
-              double &start,
-              double &end) {
-    if (std::abs(direction) < EPS)
-        return origin >= minimum && origin <= maximum;
-
-    auto first = (minimum - origin) / direction;
-    auto second = (maximum - origin) / direction;
-    if (first > second)
-        std::swap(first, second);
-
-    start = std::max(start, first);
-    end = std::min(end, second);
-    return start <= end;
-}
-
-std::pair<Vector2d, Vector2d> clippedBisector(const Vector2d &left,
-                                               const Vector2d &right,
-                                               const BoundingBox &boundingBox) {
-    const Vector2d midpoint{(left.x + right.x) / 2.0, (left.y + right.y) / 2.0};
-    const Vector2d direction{left.y - right.y, right.x - left.x};
-    auto start = -std::numeric_limits<double>::infinity();
-    auto end = std::numeric_limits<double>::infinity();
-
-    if (!clipAxis(midpoint.x, direction.x, boundingBox.min.x, boundingBox.max.x, start, end)
-        || !clipAxis(midpoint.y, direction.y, boundingBox.min.y, boundingBox.max.y, start, end))
-        throw std::logic_error("The Voronoi bisector does not intersect the bounding box.");
-
-    return {{midpoint.x + direction.x * start, midpoint.y + direction.y * start},
-            {midpoint.x + direction.x * end, midpoint.y + direction.y * end}};
-}
-
-double halfPlaneValue(Vector2d point, Vector2d normal, double offset) noexcept {
-    return point.x * normal.x + point.y * normal.y - offset;
+double halfPlaneValue(Vector2d point,
+                      Vector2d normal,
+                      Vector2d midpoint) noexcept {
+    const auto relative = point - midpoint;
+    return relative.x * normal.x + relative.y * normal.y;
 }
 
 std::vector<Vector2d> clipPolygon(const std::vector<Vector2d> &input,
                                   Vector2d normal,
-                                  double offset) {
+                                  Vector2d midpoint,
+                                  double lengthTolerance) {
     std::vector<Vector2d> output;
     if (input.empty())
         return output;
 
     output.reserve(input.size() + 1);
+    const auto halfPlaneTolerance = lengthTolerance * normal.length();
     auto previous = input.back();
-    auto previousValue = halfPlaneValue(previous, normal, offset);
-    auto previousInside = previousValue <= EPS;
+    auto previousValue = halfPlaneValue(previous, normal, midpoint);
+    auto previousInside = previousValue <= halfPlaneTolerance;
 
     for (const auto &current : input) {
-        const auto currentValue = halfPlaneValue(current, normal, offset);
-        const auto currentInside = currentValue <= EPS;
+        const auto currentValue = halfPlaneValue(current, normal, midpoint);
+        const auto currentInside = currentValue <= halfPlaneTolerance;
 
         if (currentInside != previousInside) {
             const auto amount = previousValue / (previousValue - currentValue);
@@ -131,7 +109,11 @@ private:
             m_order.begin() + static_cast<std::ptrdiff_t>(middle),
             m_order.begin() + static_cast<std::ptrdiff_t>(end),
             [this, axis](SiteId left, SiteId right) {
-                return coordinate(left, axis) < coordinate(right, axis);
+                const auto leftCoordinate = coordinate(left, axis);
+                const auto rightCoordinate = coordinate(right, axis);
+                if (leftCoordinate != rightCoordinate)
+                    return leftCoordinate < rightCoordinate;
+                return left < right;
             });
         build(begin, middle, depth + 1);
         build(middle + 1, end, depth + 1);
@@ -187,9 +169,12 @@ private:
     }
 };
 
-std::vector<std::vector<SiteId>> collectCellNeighbors(const DCEL &diagram) {
-    std::vector<std::vector<SiteId>> neighbors(diagram.polygons().size());
+std::vector<std::vector<SiteId>> collectCandidateNeighbors(const DCEL &diagram) {
+    std::vector<std::vector<SiteId>> candidates(diagram.polygons().size());
 
+    // Face pairs are reliable sweep output even though the DCEL's linked boundary
+    // cycles are intentionally incomplete. They are candidates only; adjacency is
+    // confirmed later against the final clipped polygons.
     for (const auto &edge : diagram.edges()) {
         if (edge.twin == INVALID_ID || edge.id > edge.twin || edge.face == INVALID_ID)
             continue;
@@ -200,30 +185,169 @@ std::vector<std::vector<SiteId>> collectCellNeighbors(const DCEL &diagram) {
 
         const auto &firstCell = diagram.polygon(edge.face);
         const auto &secondCell = diagram.polygon(twin.face);
-        neighbors[static_cast<std::size_t>(firstCell.id)].push_back(secondCell.site);
-        neighbors[static_cast<std::size_t>(secondCell.id)].push_back(firstCell.site);
+        candidates[static_cast<std::size_t>(firstCell.id)].push_back(secondCell.site);
+        candidates[static_cast<std::size_t>(secondCell.id)].push_back(firstCell.site);
     }
 
     constexpr std::size_t supplementalNeighborCount = 12;
     const NearestSiteIndex siteIndex{diagram.sites()};
     for (const auto &cell : diagram.polygons()) {
         auto nearest = siteIndex.nearest(cell.site, supplementalNeighborCount);
-        auto &cellNeighbors = neighbors[static_cast<std::size_t>(cell.id)];
-        cellNeighbors.insert(cellNeighbors.end(), nearest.begin(), nearest.end());
+        auto &cellCandidates = candidates[static_cast<std::size_t>(cell.id)];
+        cellCandidates.insert(cellCandidates.end(), nearest.begin(), nearest.end());
     }
 
-    for (auto &cellNeighbors : neighbors) {
-        std::ranges::sort(cellNeighbors);
-        const auto duplicates = std::ranges::unique(cellNeighbors);
-        cellNeighbors.erase(duplicates.begin(), duplicates.end());
+    for (auto &cellCandidates : candidates) {
+        std::ranges::sort(cellCandidates);
+        const auto duplicates = std::ranges::unique(cellCandidates);
+        cellCandidates.erase(duplicates.begin(), duplicates.end());
     }
 
-    return neighbors;
+    // Supplemental nearest-site candidates are directional. Make the candidate
+    // relation symmetric before clipping and final shared-edge verification.
+    for (std::size_t index = 0; index < candidates.size(); ++index) {
+        for (const auto candidate : candidates[index]) {
+            if (candidate == static_cast<SiteId>(index))
+                continue;
+            candidates[static_cast<std::size_t>(candidate)].push_back(
+                static_cast<SiteId>(index));
+        }
+    }
+    for (auto &cellCandidates : candidates) {
+        std::ranges::sort(cellCandidates);
+        const auto duplicates = std::ranges::unique(cellCandidates);
+        cellCandidates.erase(duplicates.begin(), duplicates.end());
+    }
+
+    return candidates;
 }
 
-void finishBoundedFaces(DCEL &diagram, const BoundingBox &boundingBox) {
-    const auto neighbors = collectCellNeighbors(diagram);
+void snapToBoundingBox(Vector2d &point,
+                       const BoundingBox &boundingBox,
+                       double tolerance) noexcept {
+    if (almostEqual(point.x, boundingBox.min.x, tolerance))
+        point.x = boundingBox.min.x;
+    else if (almostEqual(point.x, boundingBox.max.x, tolerance))
+        point.x = boundingBox.max.x;
+
+    if (almostEqual(point.y, boundingBox.min.y, tolerance))
+        point.y = boundingBox.min.y;
+    else if (almostEqual(point.y, boundingBox.max.y, tolerance))
+        point.y = boundingBox.max.y;
+}
+
+void cleanPolygon(std::vector<Vector2d> &vertices,
+                  const BoundingBox &boundingBox,
+                  double tolerance) {
+    std::vector<Vector2d> cleaned;
+    cleaned.reserve(vertices.size());
+
+    for (auto point : vertices) {
+        snapToBoundingBox(point, boundingBox, tolerance);
+        if (cleaned.empty()
+            || !pointsAlmostEqual(cleaned.back(), point, tolerance)) {
+            cleaned.push_back(point);
+        }
+    }
+    if (cleaned.size() > 1
+        && pointsAlmostEqual(cleaned.front(), cleaned.back(), tolerance)) {
+        cleaned.pop_back();
+    }
+
+    // Removing a short edge can expose another short edge at the join.
+    bool removed = true;
+    while (removed && cleaned.size() >= 3) {
+        removed = false;
+        for (std::size_t index = 0; index < cleaned.size(); ++index) {
+            const auto next = (index + 1) % cleaned.size();
+            if (!pointsAlmostEqual(cleaned[index], cleaned[next], tolerance))
+                continue;
+
+            cleaned.erase(cleaned.begin() + static_cast<std::ptrdiff_t>(next));
+            removed = true;
+            break;
+        }
+    }
+
+    long double twiceArea = 0.0L;
+    if (!cleaned.empty()) {
+        const auto origin = cleaned.front();
+        for (std::size_t index = 1; index + 1 < cleaned.size(); ++index) {
+            const auto current = cleaned[index] - origin;
+            const auto next = cleaned[index + 1] - origin;
+            twiceArea += static_cast<long double>(current.x) * next.y
+                         - static_cast<long double>(current.y) * next.x;
+        }
+    }
+    if (twiceArea < 0.0L)
+        std::ranges::reverse(cleaned);
+
+    vertices = std::move(cleaned);
+}
+
+bool segmentsShareBoundary(Vector2d firstStart,
+                           Vector2d firstEnd,
+                           Vector2d secondStart,
+                           Vector2d secondEnd,
+                           double tolerance) noexcept {
+    const auto firstDirection = firstEnd - firstStart;
+    const auto secondDirection = secondEnd - secondStart;
+    const auto firstLength = firstDirection.length();
+    const auto secondLength = secondDirection.length();
+    if (firstLength <= tolerance || secondLength <= tolerance)
+        return false;
+
+    const Vector2d unit{firstDirection.x / firstLength,
+                        firstDirection.y / firstLength};
+    const auto perpendicularDistance = [&](Vector2d point) {
+        const auto relative = point - firstStart;
+        return std::abs(relative.x * unit.y - relative.y * unit.x);
+    };
+    if (perpendicularDistance(secondStart) > tolerance
+        || perpendicularDistance(secondEnd) > tolerance) {
+        return false;
+    }
+
+    const auto project = [&](Vector2d point) {
+        const auto relative = point - firstStart;
+        return relative.x * unit.x + relative.y * unit.y;
+    };
+    auto secondMinimum = project(secondStart);
+    auto secondMaximum = project(secondEnd);
+    if (secondMinimum > secondMaximum)
+        std::swap(secondMinimum, secondMaximum);
+
+    const auto overlap = std::min(firstLength, secondMaximum)
+                         - std::max(0.0, secondMinimum);
+    return overlap > tolerance;
+}
+
+bool polygonsShareBoundary(const std::vector<Vector2d> &first,
+                           const std::vector<Vector2d> &second,
+                           double tolerance) noexcept {
+    for (std::size_t firstIndex = 0; firstIndex < first.size(); ++firstIndex) {
+        const auto firstNext = (firstIndex + 1) % first.size();
+        for (std::size_t secondIndex = 0; secondIndex < second.size(); ++secondIndex) {
+            const auto secondNext = (secondIndex + 1) % second.size();
+            if (segmentsShareBoundary(first[firstIndex],
+                                      first[firstNext],
+                                      second[secondIndex],
+                                      second[secondNext],
+                                      tolerance)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+WorldDivision finishBoundedCells(const DCEL &diagram,
+                                 const BoundingBox &boundingBox,
+                                 NumericalTolerance tolerance) {
+    const auto candidates = collectCandidateNeighbors(diagram);
     const auto cellCount = diagram.polygons().size();
+    WorldDivision division;
+    division.cells.reserve(cellCount);
 
     for (std::size_t index = 0; index < cellCount; ++index) {
         const auto cellId = static_cast<PolygonId>(index);
@@ -236,36 +360,86 @@ void finishBoundedFaces(DCEL &diagram, const BoundingBox &boundingBox) {
             {boundingBox.min.x, boundingBox.max.y},
         };
 
-        for (const auto neighbor : neighbors[index]) {
-            const auto &other = diagram.site(neighbor);
+        for (const auto candidate : candidates[index]) {
+            const auto &other = diagram.site(candidate);
             const auto normal = other.position - site.position;
-            const auto offset = (other.position.squaredLength()
-                                 - site.position.squaredLength())
-                                * 0.5;
-            boundary = clipPolygon(boundary, normal, offset);
+            const auto midpoint = site.position + normal * 0.5;
+            boundary = clipPolygon(boundary,
+                                   normal,
+                                   midpoint,
+                                   tolerance.geometryLength);
         }
 
-        std::vector<VertexId> vertices;
-        vertices.reserve(boundary.size());
-        for (const auto point : boundary)
-            vertices.push_back(diagram.addVertex(point));
-        diagram.polygon(cellId).vertices = std::move(vertices);
+        cleanPolygon(boundary, boundingBox, tolerance.geometryLength);
+        if (boundary.size() < 3) {
+            throw std::logic_error(
+                "Fortune produced a degenerate clipped polygon for site "
+                + std::to_string(index) + ".");
+        }
+
+        division.cells.push_back({
+            static_cast<CellId>(index),
+            site.position,
+            std::move(boundary),
+            {},
+        });
     }
+
+    const auto sharedEdgeTolerance = tolerance.sharedEdgeLength();
+    for (std::size_t index = 0; index < cellCount; ++index) {
+        for (const auto candidate : candidates[index]) {
+            const auto otherIndex = static_cast<std::size_t>(candidate);
+            if (otherIndex <= index)
+                continue;
+            if (!polygonsShareBoundary(division.cells[index].vertices,
+                                       division.cells[otherIndex].vertices,
+                                       sharedEdgeTolerance)) {
+                continue;
+            }
+
+            division.cells[index].neighbors.push_back(
+                static_cast<CellId>(otherIndex));
+            division.cells[otherIndex].neighbors.push_back(
+                static_cast<CellId>(index));
+        }
+    }
+    for (auto &cell : division.cells)
+        std::ranges::sort(cell.neighbors);
+
+    return division;
 }
 
-}
+class FortuneSweep {
+public:
+    [[nodiscard]] WorldDivision run(std::span<const Site> sites,
+                                    const BoundingBox &boundingBox,
+                                    NumericalTolerance tolerance);
 
-void Fortune::calculateVoronoi(const std::vector<Site> &sites,
-                               const BoundingBox &boundingBox) {
+private:
+    BeachLine m_beachline;
+    DCEL m_dcel;
+    EventQueue m_events;
+    std::vector<PolygonId> m_siteFaces;
+
+    void addSiteEvents(std::span<const Site> sites);
+    void handleSiteEvent(SiteEvent *event);
+    void handleCircleEvent(CircleEvent *event);
+    void checkCircleEvent(BeachLine::Node *node, double sweepLine);
+    void invalidateCircleEvent(BeachLine::Node *node);
+    [[nodiscard]] PolygonId faceFor(SiteId site) const;
+    [[nodiscard]] std::pair<EdgeId, EdgeId> createEdgePair(
+        BeachLine::Node *left,
+        BeachLine::Node *right);
+    void setFaceBoundary(PolygonId face, EdgeId edge);
+};
+
+WorldDivision FortuneSweep::run(std::span<const Site> sites,
+                                const BoundingBox &boundingBox,
+                                NumericalTolerance tolerance) {
     m_events.clear();
     m_beachline.clear();
     m_dcel.clear();
     m_siteFaces.clear();
-
-    for (const auto &site : sites) {
-        if (!boundingBox.contains(site.position))
-            throw std::invalid_argument("Every site must lie inside the bounding box.");
-    }
 
     addSiteEvents(sites);
 
@@ -277,19 +451,10 @@ void Fortune::calculateVoronoi(const std::vector<Site> &sites,
             handleCircleEvent(static_cast<CircleEvent *>(event));
     }
 
-    finishOpenEdges(boundingBox);
-    finishBoundedFaces(m_dcel, boundingBox);
+    return finishBoundedCells(m_dcel, boundingBox, tolerance);
 }
 
-const DCEL &Fortune::dcel() const noexcept {
-    return m_dcel;
-}
-
-DCEL Fortune::takeDcel() noexcept {
-    return std::move(m_dcel);
-}
-
-void Fortune::addSiteEvents(const std::vector<Site> &sites) {
+void FortuneSweep::addSiteEvents(std::span<const Site> sites) {
     for (const auto &site : sites) {
         const auto siteId = m_dcel.addSite(site.position);
         m_siteFaces.push_back(m_dcel.addPolygon(siteId));
@@ -297,7 +462,7 @@ void Fortune::addSiteEvents(const std::vector<Site> &sites) {
     }
 }
 
-void Fortune::handleSiteEvent(SiteEvent *event) {
+void FortuneSweep::handleSiteEvent(SiteEvent *event) {
     if (m_beachline.empty()) {
         m_beachline.insertFirst(Arc{event->site()});
         return;
@@ -321,7 +486,7 @@ void Fortune::handleSiteEvent(SiteEvent *event) {
     checkCircleEvent(result.right, sweepLine);
 }
 
-void Fortune::handleCircleEvent(CircleEvent *event) {
+void FortuneSweep::handleCircleEvent(CircleEvent *event) {
     if (!event->isValid())
         return;
 
@@ -369,7 +534,7 @@ void Fortune::handleCircleEvent(CircleEvent *event) {
     checkCircleEvent(result.next, sweepLine);
 }
 
-void Fortune::checkCircleEvent(BeachLine::Node *node, double sweepLine) {
+void FortuneSweep::checkCircleEvent(BeachLine::Node *node, double sweepLine) {
     if (node == nullptr)
         return;
 
@@ -409,7 +574,7 @@ void Fortune::checkCircleEvent(BeachLine::Node *node, double sweepLine) {
     node->arc().pendingEvent = static_cast<CircleEvent *>(m_events.add(std::move(event)));
 }
 
-void Fortune::invalidateCircleEvent(BeachLine::Node *node) {
+void FortuneSweep::invalidateCircleEvent(BeachLine::Node *node) {
     if (node == nullptr)
         return;
 
@@ -418,15 +583,15 @@ void Fortune::invalidateCircleEvent(BeachLine::Node *node) {
         event->setInvalid();
 }
 
-PolygonId Fortune::faceFor(SiteId site) const {
+PolygonId FortuneSweep::faceFor(SiteId site) const {
     if (site < 0 || static_cast<std::size_t>(site) >= m_siteFaces.size())
         throw std::out_of_range("Site does not belong to this Fortune sweep.");
 
     return m_siteFaces[static_cast<std::size_t>(site)];
 }
 
-std::pair<EdgeId, EdgeId> Fortune::createEdgePair(BeachLine::Node *left,
-                                                   BeachLine::Node *right) {
+std::pair<EdgeId, EdgeId> FortuneSweep::createEdgePair(BeachLine::Node *left,
+                                                        BeachLine::Node *right) {
     const auto leftFace = faceFor(left->arc().focus);
     const auto rightFace = faceFor(right->arc().focus);
     const auto edges = m_dcel.addEdgePairForFaces(leftFace, rightFace);
@@ -435,48 +600,16 @@ std::pair<EdgeId, EdgeId> Fortune::createEdgePair(BeachLine::Node *left,
     return edges;
 }
 
-void Fortune::setFaceBoundary(PolygonId face, EdgeId edge) {
+void FortuneSweep::setFaceBoundary(PolygonId face, EdgeId edge) {
     if (m_dcel.polygon(face).edge == INVALID_ID)
         m_dcel.setPolygonBoundary(face, edge);
 }
 
-void Fortune::finishOpenEdges(const BoundingBox &boundingBox) {
-    const auto edgeCount = m_dcel.edges().size();
-    for (std::size_t index = 0; index < edgeCount; ++index) {
-        const auto edge = static_cast<EdgeId>(index);
-        if (m_dcel.edge(edge).twin < edge)
-            continue;
+} // namespace
 
-        finishEdgePair(edge, boundingBox);
-    }
-}
-
-void Fortune::finishEdgePair(EdgeId edgeId, const BoundingBox &boundingBox) {
-    const auto twinId = m_dcel.edge(edgeId).twin;
-    if (twinId == INVALID_ID)
-        throw std::logic_error("A Voronoi edge must have a twin.");
-
-    const auto &edge = m_dcel.edge(edgeId);
-    const auto &twin = m_dcel.edge(twinId);
-    if (edge.origin != INVALID_ID && twin.origin != INVALID_ID)
-        return;
-
-    const auto &leftSite = m_dcel.site(m_dcel.polygon(edge.face).site).position;
-    const auto &rightSite = m_dcel.site(m_dcel.polygon(twin.face).site).position;
-    const auto endpoints = clippedBisector(leftSite, rightSite, boundingBox);
-
-    if (edge.origin == INVALID_ID)
-        m_dcel.setOrigin(edgeId, boundaryVertex(endpoints.first));
-    if (twin.origin == INVALID_ID)
-        m_dcel.setOrigin(twinId, boundaryVertex(endpoints.second));
-}
-
-VertexId Fortune::boundaryVertex(Vector2d position) {
-    for (const auto &vertex : m_dcel.vertices()) {
-        if (std::abs(vertex.position.x - position.x) < EPS
-            && std::abs(vertex.position.y - position.y) < EPS)
-            return vertex.id;
-    }
-
-    return m_dcel.addVertex(position);
+WorldDivision Fortune::generate(std::span<const Site> sites,
+                                const BoundingBox &boundingBox) const {
+    const auto tolerance = validateSites(sites, boundingBox);
+    FortuneSweep sweep;
+    return sweep.run(sites, boundingBox, tolerance);
 }

@@ -1,25 +1,27 @@
 #pragma once
 
 #include "BoundingBox.h"
-#include "DCEL.h"
 #include "Region.h"
+#include "WorldDivision.h"
 
 #include <utility>
 #include <vector>
 
 class World {
 public:
-    World(BoundingBox boundingBox, DCEL diagram, std::vector<Region> regions)
+    World(BoundingBox boundingBox,
+          WorldDivision division,
+          std::vector<Region> regions)
         : m_boundingBox(std::move(boundingBox)),
-          m_diagram(std::move(diagram)),
+          m_division(std::move(division)),
           m_regions(std::move(regions)) {}
 
     [[nodiscard]] const BoundingBox &boundingBox() const noexcept {
         return m_boundingBox;
     }
 
-    [[nodiscard]] const DCEL &diagram() const noexcept {
-        return m_diagram;
+    [[nodiscard]] const WorldDivision &division() const noexcept {
+        return m_division;
     }
 
     [[nodiscard]] const std::vector<Region> &regions() const noexcept {
@@ -28,6 +30,6 @@ public:
 
 private:
     BoundingBox m_boundingBox;
-    DCEL m_diagram;
+    WorldDivision m_division;
     std::vector<Region> m_regions;
 };
