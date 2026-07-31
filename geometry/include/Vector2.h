@@ -3,6 +3,8 @@
 #include <cmath>
 #include <tuple>
 
+namespace worldgen {
+
 template <class T>
 class Vector2 {
 public:
@@ -229,3 +231,5 @@ template<class T>
 inline double Vector2<T>::squaredLength() const noexcept {
     return x*x + y*y;
 }
+
+} // namespace worldgen

@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace worldgen {
+
 struct WorldGenerationSettings {
     BoundingBox bounds;
     std::uint64_t seed{0};
@@ -32,3 +34,5 @@ public:
 private:
     const WorldGenerationSettings m_settings;
 };
+
+} // namespace worldgen

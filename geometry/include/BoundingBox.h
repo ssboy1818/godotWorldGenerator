@@ -5,6 +5,8 @@
 #include <cmath>
 #include <stdexcept>
 
+namespace worldgen {
+
 class BoundingBox {
 public:
     Vector2d min;
@@ -29,3 +31,5 @@ public:
             && point.y >= min.y && point.y <= max.y;
     }
 };
+
+} // namespace worldgen

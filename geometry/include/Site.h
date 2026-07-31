@@ -3,6 +3,8 @@
 #include "Vector2.h"
 #include "Id.h"
 
+namespace worldgen {
+
 class Site {
 public:
     SiteId id{INVALID_ID};
@@ -77,3 +79,5 @@ inline bool Site::operator>(const Site &other) const noexcept {
 inline bool Site::operator==(const Site &other) const noexcept {
     return position == other.position;
 }
+
+} // namespace worldgen

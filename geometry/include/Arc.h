@@ -2,6 +2,8 @@
 
 #include "Id.h"
 
+namespace worldgen {
+
 class CircleEvent;
 
 class Arc {
@@ -13,3 +15,5 @@ public:
 public:
     explicit Arc(SiteId site) noexcept : focus(site) {}
 };
+
+} // namespace worldgen

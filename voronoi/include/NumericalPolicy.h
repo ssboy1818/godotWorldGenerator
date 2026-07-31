@@ -6,6 +6,8 @@
 #include <cmath>
 #include <limits>
 
+namespace worldgen {
+
 struct NumericalTolerance {
     // Minimum supported separation between input sites.
     double siteSeparation{0.0};
@@ -57,3 +59,5 @@ inline bool pointsAlmostEqual(Vector2d left,
                               double tolerance) noexcept {
     return std::hypot(left.x - right.x, left.y - right.y) <= tolerance;
 }
+
+} // namespace worldgen

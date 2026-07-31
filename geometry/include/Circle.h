@@ -6,6 +6,8 @@
 #include <array>
 #include <stdexcept>
 
+namespace worldgen {
+
 namespace {
 
 double det2x2(double a, double b, double c, double d) {
@@ -63,3 +65,5 @@ inline void Circle::calculateCenter() {
     m_center.x = Dx / (2 * D);
     m_center.y = Dy / (2 * D);
 }
+
+} // namespace worldgen

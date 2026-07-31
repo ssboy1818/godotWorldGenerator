@@ -2,6 +2,8 @@
 
 #include "Id.h"
 
+namespace worldgen {
+
 class Edge {
 public:
     EdgeId id{INVALID_ID};
@@ -19,3 +21,5 @@ public:
 
 inline Edge::Edge(VertexId origin_, PolygonId face_) noexcept
     : origin(origin_), face(face_) {}
+
+} // namespace worldgen

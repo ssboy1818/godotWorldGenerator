@@ -5,6 +5,7 @@
 
 #include <cstdint>
 
+namespace worldgen {
 namespace noise {
 
 [[nodiscard]] double perlinNoise(Vector2d pos,
@@ -25,3 +26,4 @@ namespace noise {
                            double strengthCoefficient = 0.5) noexcept;
 
 } // namespace noise
+} // namespace worldgen

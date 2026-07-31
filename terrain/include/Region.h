@@ -2,6 +2,8 @@
 
 #include "WorldDivision.h"
 
+namespace worldgen {
+
 enum class RegionType {
     Water,
     Land,
@@ -41,3 +43,5 @@ private:
     double m_elevation;
     RegionType m_type;
 };
+
+} // namespace worldgen

@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+namespace worldgen {
+
 class World {
 public:
     World(BoundingBox boundingBox,
@@ -33,3 +35,5 @@ private:
     WorldDivision m_division;
     std::vector<Region> m_regions;
 };
+
+} // namespace worldgen

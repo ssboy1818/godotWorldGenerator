@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <utility>
 
+namespace worldgen {
+
 class BeachLine {
 public:
     class Node {
@@ -567,3 +569,5 @@ private:
         setColor(node, Node::Color::Black);
     }
 };
+
+} // namespace worldgen

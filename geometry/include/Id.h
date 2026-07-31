@@ -1,10 +1,14 @@
 #pragma once
 
-#include <sys/types.h>
+#include <cstdint>
 
-using SiteId = ssize_t;
-using VertexId = ssize_t;
-using EdgeId = ssize_t;
-using PolygonId = ssize_t;
-inline constexpr ssize_t INVALID_ID = -1;
+namespace worldgen {
+
+using SiteId = std::int64_t;
+using VertexId = std::int64_t;
+using EdgeId = std::int64_t;
+using PolygonId = std::int64_t;
+inline constexpr std::int64_t INVALID_ID = -1;
 inline constexpr double EPS = 1e-9;
+
+} // namespace worldgen

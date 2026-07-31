@@ -5,6 +5,8 @@
 
 #include <vector>
 
+namespace worldgen {
+
 class SiteGenerator {
 public:
     virtual ~SiteGenerator() noexcept = default;
@@ -12,3 +14,5 @@ public:
     [[nodiscard]] virtual std::vector<Site> generateSites(
         const BoundingBox &boundingBox) const = 0;
 };
+
+} // namespace worldgen

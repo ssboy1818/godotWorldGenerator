@@ -7,6 +7,10 @@
 
 #include <span>
 
+namespace worldgen {
+
 [[nodiscard]] NumericalTolerance validateSites(
     std::span<const Site> sites,
     const BoundingBox &boundingBox);
+
+} // namespace worldgen

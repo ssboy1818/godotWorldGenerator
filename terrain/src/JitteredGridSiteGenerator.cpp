@@ -4,6 +4,8 @@
 #include <random>
 #include <stdexcept>
 
+namespace worldgen {
+
 JitteredGridSiteGenerator::JitteredGridSiteGenerator(
     std::size_t columns,
     std::size_t rows,
@@ -48,3 +50,5 @@ std::vector<Site> JitteredGridSiteGenerator::generateSites(
 
     return sites;
 }
+
+} // namespace worldgen

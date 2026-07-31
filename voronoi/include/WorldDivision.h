@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+namespace worldgen {
+
 using CellId = std::uint32_t;
 
 struct Cell {
@@ -18,3 +20,5 @@ struct Cell {
 struct WorldDivision {
     std::vector<Cell> cells;
 };
+
+} // namespace worldgen

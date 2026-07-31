@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+namespace worldgen {
+
 class EventQueue {
 public:
     EventQueue() noexcept = default;
@@ -50,3 +52,5 @@ private:
     std::priority_queue<Event *, std::vector<Event *>, EventCompare> m_queue;
     std::vector<std::unique_ptr<Event>> m_events;
 };
+
+} // namespace worldgen

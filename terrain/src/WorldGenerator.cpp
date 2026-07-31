@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <utility>
 
+namespace worldgen {
+
 namespace {
 
 void validateSettings(const WorldGenerationSettings &settings) {
@@ -86,3 +88,5 @@ World WorldGenerator::generate() const {
 
     return World{boundingBox, std::move(division), std::move(regions)};
 }
+
+} // namespace worldgen

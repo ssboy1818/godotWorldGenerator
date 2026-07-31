@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace worldgen {
+
 class JitteredGridSiteGenerator final : public SiteGenerator {
 public:
     JitteredGridSiteGenerator(
@@ -22,3 +24,5 @@ private:
     double m_jitter;
     std::uint64_t m_seed;
 };
+
+} // namespace worldgen

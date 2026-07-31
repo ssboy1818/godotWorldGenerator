@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+namespace worldgen {
+
 namespace {
 
 double halfPlaneValue(Vector2d point,
@@ -613,3 +615,5 @@ WorldDivision Fortune::generate(std::span<const Site> sites,
     FortuneSweep sweep;
     return sweep.run(sites, boundingBox, tolerance);
 }
+
+} // namespace worldgen

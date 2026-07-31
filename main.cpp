@@ -13,11 +13,11 @@
 
 namespace {
 
-double svgY(double coordinate, const BoundingBox &boundingBox) {
+double svgY(double coordinate, const worldgen::BoundingBox &boundingBox) {
     return boundingBox.max.y - coordinate;
 }
 
-void writeSvg(const World &world, std::ostream &output) {
+void writeSvg(const worldgen::World &world, std::ostream &output) {
     const auto &boundingBox = world.boundingBox();
     const auto width = boundingBox.max.x - boundingBox.min.x;
     const auto height = boundingBox.max.y - boundingBox.min.y;
@@ -53,7 +53,7 @@ void writeSvg(const World &world, std::ostream &output) {
 }
 
 int main() {
-    const WorldGenerator worldGenerator{WorldGenerationSettings{
+    const worldgen::WorldGenerator worldGenerator{worldgen::WorldGenerationSettings{
         .bounds = {{0.0, 0.0}, {2048.0, 2048.0}},
         .seed = 0,
         .columns = 300,
@@ -82,14 +82,14 @@ int main() {
         cells.begin(),
         cells.end(),
         std::size_t{0},
-        [](std::size_t total, const Cell &cell) {
+        [](std::size_t total, const worldgen::Cell &cell) {
             return total + cell.vertices.size();
         });
     const auto neighborPairCount = std::accumulate(
         cells.begin(),
         cells.end(),
         std::size_t{0},
-        [](std::size_t total, const Cell &cell) {
+        [](std::size_t total, const worldgen::Cell &cell) {
             return total + cell.neighbors.size();
         }) / 2;
     const auto timePerSite = cells.empty()
@@ -97,7 +97,7 @@ int main() {
                                  : elapsed.count() / static_cast<double>(cells.size());
     const auto waterCount = std::count_if(world.regions().begin(),
                                           world.regions().end(),
-                                          [](const Region &region) {
+                                          [](const worldgen::Region &region) {
                                               return region.isWater();
                                           });
 

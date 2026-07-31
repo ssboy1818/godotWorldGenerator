@@ -3,6 +3,8 @@
 #include "Circle.h"
 #include "Id.h"
 
+namespace worldgen {
+
 class Arc;
 
 enum class EventType {
@@ -120,3 +122,5 @@ inline bool Event::operator<(const Event &other) const noexcept {
 
     return m_type == EventType::Circle && other.m_type == EventType::Site;
 }
+
+} // namespace worldgen

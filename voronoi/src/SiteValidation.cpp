@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace worldgen {
+
 namespace {
 
 struct GridCell {
@@ -107,3 +109,5 @@ NumericalTolerance validateSites(std::span<const Site> sites,
 
     return tolerance;
 }
+
+} // namespace worldgen

@@ -6,6 +6,8 @@
 
 #include <span>
 
+namespace worldgen {
+
 class Fortune {
 public:
     Fortune() noexcept = default;
@@ -17,3 +19,5 @@ public:
         std::span<const Site> sites,
         const BoundingBox &boundingBox) const;
 };
+
+} // namespace worldgen

@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <limits>
 
+namespace worldgen {
+
 namespace {
 
 struct Gradient {
@@ -145,3 +147,5 @@ double noise(const BoundingBox &worldBounds,
 }
 
 } // namespace noise
+
+} // namespace worldgen

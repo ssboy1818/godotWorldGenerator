@@ -237,6 +237,8 @@ standalone SVG exporter.
 ## Engineering rules for contributors and agents
 
 - Preserve the core/Godot dependency boundary described above.
+- Keep project-owned public symbols in the `worldgen` namespace; noise utilities
+  live in the nested `worldgen::noise` namespace.
 - Read the relevant public headers and their implementation before changing a
   subsystem; several invariants span `geometry` and `voronoi`.
 - Keep public inputs validated. Reject non-finite values, invalid ranges, invalid

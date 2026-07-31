@@ -5,10 +5,13 @@
 #include "Site.h"
 #include "Vertex.h"
 
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace worldgen {
 
 class DCEL {
 public:
@@ -161,12 +164,12 @@ private:
 
 private:
     template <class T>
-    static ssize_t nextId(const std::vector<T> &values) noexcept {
-        return static_cast<ssize_t>(values.size());
+    static std::int64_t nextId(const std::vector<T> &values) noexcept {
+        return static_cast<std::int64_t>(values.size());
     }
 
     template <class T>
-    static T &get(std::vector<T> &values, ssize_t id, const char *type) {
+    static T &get(std::vector<T> &values, std::int64_t id, const char *type) {
         if (id < 0 || static_cast<std::size_t>(id) >= values.size())
             throw std::out_of_range(std::string("Invalid ") + type + " ID.");
 
@@ -174,10 +177,12 @@ private:
     }
 
     template <class T>
-    static const T &get(const std::vector<T> &values, ssize_t id, const char *type) {
+    static const T &get(const std::vector<T> &values, std::int64_t id, const char *type) {
         if (id < 0 || static_cast<std::size_t>(id) >= values.size())
             throw std::out_of_range(std::string("Invalid ") + type + " ID.");
 
         return values[static_cast<std::size_t>(id)];
     }
 };
+
+} // namespace worldgen
