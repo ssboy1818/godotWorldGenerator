@@ -32,10 +32,12 @@ constexpr std::uint64_t mix(std::uint64_t value) noexcept {
     return value ^ (value >> 31);
 }
 
-std::uint64_t latticeHash(std::int64_t x, std::int64_t y) noexcept {
+std::uint64_t latticeHash(std::int64_t x,
+                          std::int64_t y,
+                          std::uint64_t seed) noexcept {
     const auto xBits = static_cast<std::uint64_t>(x);
     const auto yBits = static_cast<std::uint64_t>(y);
-    return mix(xBits ^ (mix(yBits) + mix(noise::seed) + 0x9e3779b97f4a7c15ULL));
+    return mix(xBits ^ (mix(yBits) + mix(seed) + 0x9e3779b97f4a7c15ULL));
 }
 
 constexpr double fade(double value) noexcept {
@@ -46,8 +48,12 @@ constexpr double lerp(double from, double to, double amount) noexcept {
     return from + amount * (to - from);
 }
 
-double gradientDot(std::int64_t x, std::int64_t y, double offsetX, double offsetY) noexcept {
-    const auto &gradient = gradients[latticeHash(x, y) % gradients.size()];
+double gradientDot(std::int64_t x,
+                   std::int64_t y,
+                   double offsetX,
+                   double offsetY,
+                   std::uint64_t seed) noexcept {
+    const auto &gradient = gradients[latticeHash(x, y, seed) % gradients.size()];
     return gradient.x * offsetX + gradient.y * offsetY;
 }
 
@@ -55,9 +61,7 @@ double gradientDot(std::int64_t x, std::int64_t y, double offsetX, double offset
 
 namespace noise {
 
-std::uint64_t seed = 0;
-
-double perlinNoise(Vector2d pos, bool normalized) noexcept {
+double perlinNoise(Vector2d pos, std::uint64_t seed, bool normalized) noexcept {
     if (!std::isfinite(pos.x) || !std::isfinite(pos.y))
         return std::numeric_limits<double>::quiet_NaN();
 
@@ -73,10 +77,10 @@ double perlinNoise(Vector2d pos, bool normalized) noexcept {
     const auto localX = pos.x - static_cast<double>(cellX);
     const auto localY = pos.y - static_cast<double>(cellY);
 
-    const auto bottomLeft = gradientDot(cellX, cellY, localX, localY);
-    const auto bottomRight = gradientDot(cellX + 1, cellY, localX - 1.0, localY);
-    const auto topLeft = gradientDot(cellX, cellY + 1, localX, localY - 1.0);
-    const auto topRight = gradientDot(cellX + 1, cellY + 1, localX - 1.0, localY - 1.0);
+    const auto bottomLeft = gradientDot(cellX, cellY, localX, localY, seed);
+    const auto bottomRight = gradientDot(cellX + 1, cellY, localX - 1.0, localY, seed);
+    const auto topLeft = gradientDot(cellX, cellY + 1, localX, localY - 1.0, seed);
+    const auto topRight = gradientDot(cellX + 1, cellY + 1, localX - 1.0, localY - 1.0, seed);
 
     const auto horizontal = fade(localX);
     const auto vertical = fade(localY);
@@ -108,6 +112,7 @@ double edgeDecay(const BoundingBox &worldBounds,
 double noise(const BoundingBox &worldBounds,
              Vector2d pos,
              Vector2d decayRadius,
+             std::uint64_t seed,
              std::uint32_t octaves,
              double baseFrequency,
              double frequencyCoefficient,
@@ -128,7 +133,7 @@ double noise(const BoundingBox &worldBounds,
         if (!std::isfinite(frequency) || !std::isfinite(strength))
             return std::numeric_limits<double>::quiet_NaN();
 
-        value += perlinNoise(pos * frequency, true) * strength;
+        value += perlinNoise(pos * frequency, seed, true) * strength;
         totalStrength += strength;
         frequency *= frequencyCoefficient;
         strength *= strengthCoefficient;

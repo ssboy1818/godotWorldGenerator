@@ -33,10 +33,9 @@ The executable in `main.cpp` demonstrates the complete pipeline that exists now:
 8. The prototype executable writes those regions to `voronoi.svg` and, in debug
    builds, prints timing and geometry counts.
 
-The generator is deterministic when its seeds and settings are fixed. The site
-generator owns a seed, while terrain noise currently uses the separate global
-`noise::seed`; consolidating both into explicit world settings is required before
-the public Godot API is considered stable.
+The generator is deterministic when its settings are fixed. A single explicit
+`WorldGenerationSettings::seed` controls both jittered site placement and terrain
+noise; generation does not depend on mutable global random state.
 
 ## Repository layout and ownership
 
@@ -91,9 +90,8 @@ Procedural elevation functions.
 - `noise` combines several octaves (fBm-style) and applies the edge-decay mask.
 - `edgeDecay` creates island-like boundaries by lowering elevation near the box.
 
-`noise::seed` is mutable global state. Avoid introducing additional global state;
-replace this seed with explicit generator/configuration state when evolving the
-API, especially before adding concurrent generation.
+Noise functions receive their seed explicitly. Avoid introducing global
+configuration state, especially before adding concurrent generation.
 
 ### `terrain/`
 
@@ -101,9 +99,10 @@ The domain-level orchestration layer.
 
 - `SiteGenerator` is the strategy interface for point placement.
 - `JitteredGridSiteGenerator` creates a regular grid with bounded random offsets.
-  `columns` and `rows` must be positive; `jitter` must be in `[0, 1]`.
-- `WorldGenerator` validates settings, invokes Voronoi and noise generation, and
-  assembles a `World`.
+  `columns` and `rows` must be positive; `jitter` must be in `[0, 1]`; and its seed
+  must be supplied explicitly.
+- `WorldGenerator` owns an immutable copy of `WorldGenerationSettings`, validates
+  it, invokes site, Voronoi, and noise generation, and assembles a `World`.
 - `World` owns the generated diagram and regions.
 - `Region` references a polygon by ID and stores elevation plus land/water type.
 
@@ -138,6 +137,7 @@ Configure and build out of source:
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ```
 
 Run the prototype from the directory in which `voronoi.svg` should be created:
@@ -154,9 +154,9 @@ cmake --build build-release --parallel
 ./build-release/worldgen
 ```
 
-There is currently no automated test target. Adding focused tests is higher
-priority than treating the generated SVG as sufficient validation. Once tests
-exist, register them with CTest and run `ctest --test-dir build --output-on-failure`.
+The `worldgen_generation_tests` CTest target covers unified-settings validation,
+seeded repeatability, and basic generated-world invariants. Continue adding
+focused tests rather than treating the generated SVG as sufficient validation.
 
 When changing generation code, verify at least:
 
@@ -270,8 +270,7 @@ standalone SVG exporter.
 Do not describe the following as completed:
 
 - Godot/GDExtension integration and public engine-facing API;
-- automated tests and CI;
-- an explicit noise seed inside world settings;
+- comprehensive automated tests and CI;
 - exported cell adjacency as domain data;
 - a complete linked DCEL boundary for every clipped polygon;
 - documented handling of duplicate sites and all geometric degeneracies;

@@ -7,9 +7,9 @@
 
 namespace noise {
 
-extern std::uint64_t seed;
-
-[[nodiscard]] double perlinNoise(Vector2d pos, bool normalized = false) noexcept;
+[[nodiscard]] double perlinNoise(Vector2d pos,
+                                 std::uint64_t seed,
+                                 bool normalized = false) noexcept;
 
 [[nodiscard]] double edgeDecay(const BoundingBox &worldBounds,
                                Vector2d decayRadius,
@@ -18,6 +18,7 @@ extern std::uint64_t seed;
 [[nodiscard]] double noise(const BoundingBox &worldBounds,
                            Vector2d pos,
                            Vector2d decayRadius,
+                           std::uint64_t seed,
                            std::uint32_t octaves = 4,
                            double baseFrequency = 0.01,
                            double frequencyCoefficient = 2.0,

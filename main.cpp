@@ -1,4 +1,3 @@
-#include "JitteredGridSiteGenerator.h"
 #include "WorldGenerator.h"
 
 #ifndef NDEBUG
@@ -10,7 +9,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <memory>
 #include <numeric>
 
 namespace {
@@ -55,14 +53,25 @@ void writeSvg(const World &world, std::ostream &output) {
 }
 
 int main() {
-    const BoundingBox boundingBox{{0.0, 0.0}, {2048.0, 2048.0}};
-    auto siteGenerator = std::make_unique<JitteredGridSiteGenerator>(300, 300, 0.8);
-    WorldGenerator worldGenerator{std::move(siteGenerator)};
+    const WorldGenerator worldGenerator{WorldGenerationSettings{
+        .bounds = {{0.0, 0.0}, {2048.0, 2048.0}},
+        .seed = 0,
+        .columns = 300,
+        .rows = 300,
+        .jitter = 0.8,
+        .seaLevel = 0.45,
+        .edgeDecayRatio = {0.15, 0.15},
+        .noiseOctaves = 5,
+        .noiseFrequency = 0.01,
+        .noiseLacunarity = 2.0,
+        .noisePersistence = 0.5,
+    }};
+    const auto &boundingBox = worldGenerator.settings().bounds;
 
 #ifndef NDEBUG
     const auto start = std::chrono::steady_clock::now();
 #endif
-    const auto world = worldGenerator.generate(boundingBox);
+    const auto world = worldGenerator.generate();
 #ifndef NDEBUG
     const auto elapsed = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - start);
