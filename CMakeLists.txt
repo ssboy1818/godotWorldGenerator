@@ -5,6 +5,8 @@ project(worldgen LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include_directories(geometry/include)
+
 add_executable(worldgen main.cpp
     geometry/include/Vector2.h
     geometry/include/Site.h
@@ -12,7 +14,9 @@ add_executable(worldgen main.cpp
     geometry/include/Polygon.h
     geometry/include/Id.h
     geometry/include/Vertex.h
-    geometry/include/Circle.h)
+    geometry/include/Circle.h
+    geometry/include/DCEL.h
+    voronoi/include/Event.h)
 
 include(GNUInstallDirs)
 install(TARGETS worldgen
