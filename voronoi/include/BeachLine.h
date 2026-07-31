@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <limits>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 class BeachLine {
@@ -113,6 +114,11 @@ public:
 
     const Node *next(const Node *node) const noexcept {
         return node == nullptr ? nullptr : node->m_next;
+    }
+
+    Node *nodeFor(const Arc *arc) const noexcept {
+        const auto iterator = m_nodes.find(arc);
+        return iterator == m_nodes.end() ? nullptr : iterator->second;
     }
 
     Node *insertFirst(Arc arc) {
@@ -243,6 +249,7 @@ public:
         }
 
         node->m_owner = nullptr;
+        m_nodes.erase(&node->m_arc);
         delete node;
         --m_size;
 
@@ -345,6 +352,7 @@ public:
         m_first = nullptr;
         m_last = nullptr;
         m_size = 0;
+        m_nodes.clear();
     }
 
 private:
@@ -352,11 +360,13 @@ private:
     Node *m_first{nullptr};
     Node *m_last{nullptr};
     std::size_t m_size{0};
+    std::unordered_map<const Arc *, Node *> m_nodes;
 
 private:
     Node *createNode(Arc arc) {
         auto *node = new Node(std::move(arc));
         node->m_owner = this;
+        m_nodes.emplace(&node->m_arc, node);
         return node;
     }
 

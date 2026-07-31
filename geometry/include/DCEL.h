@@ -34,8 +34,10 @@ public:
         return id;
     }
 
-    EdgeId addEdge(VertexId origin, PolygonId face = INVALID_ID) {
-        auto &originVertex = vertex(origin);
+    EdgeId addEdge(VertexId origin = INVALID_ID, PolygonId face = INVALID_ID) {
+        Vertex *originVertex = nullptr;
+        if (origin != INVALID_ID)
+            originVertex = &vertex(origin);
         if (face != INVALID_ID)
             polygon(face);
 
@@ -43,8 +45,8 @@ public:
         m_edges.emplace_back(origin, face);
         m_edges.back().id = id;
 
-        if (originVertex.edge == INVALID_ID)
-            originVertex.edge = id;
+        if (originVertex != nullptr && originVertex->edge == INVALID_ID)
+            originVertex->edge = id;
 
         return id;
     }
@@ -57,6 +59,25 @@ public:
         const auto second = addEdge(secondOrigin, secondFace);
         setTwins(first, second);
         return {first, second};
+    }
+
+    std::pair<EdgeId, EdgeId> addEdgePairForFaces(PolygonId firstFace,
+                                                   PolygonId secondFace) {
+        const auto first = addEdge(INVALID_ID, firstFace);
+        const auto second = addEdge(INVALID_ID, secondFace);
+        setTwins(first, second);
+        return {first, second};
+    }
+
+    void setOrigin(EdgeId edgeId, VertexId origin) {
+        auto &targetEdge = edge(edgeId);
+        auto &originVertex = vertex(origin);
+        if (targetEdge.origin != INVALID_ID && targetEdge.origin != origin)
+            throw std::logic_error("The edge origin is already set.");
+
+        targetEdge.origin = origin;
+        if (originVertex.edge == INVALID_ID)
+            originVertex.edge = edgeId;
     }
 
     void setTwins(EdgeId first, EdgeId second) {
@@ -123,6 +144,13 @@ public:
 
     const std::vector<Polygon> &polygons() const noexcept {
         return m_polygons;
+    }
+
+    void clear() noexcept {
+        m_sites.clear();
+        m_vertices.clear();
+        m_edges.clear();
+        m_polygons.clear();
     }
 
 private:

@@ -3,18 +3,25 @@
 #include "Circle.h"
 #include "Id.h"
 
+class Arc;
+
 enum class EventType {
-    Circle, Site
+    Circle,
+    Site
 };
 
 class Event {
 public:
-    Event(EventType type) noexcept
-        : m_type(type) {};
+    explicit Event(EventType type) noexcept
+        : m_type(type) {}
 
-    EventType type() const noexcept {
+    virtual ~Event() noexcept = default;
+
+    [[nodiscard]] EventType type() const noexcept {
         return m_type;
-    };
+    }
+
+    [[nodiscard]] virtual Vector2d position() const noexcept = 0;
 
     bool operator<(const Event &other) const noexcept;
 
@@ -25,15 +32,15 @@ private:
 class SiteEvent : public Event {
 public:
     SiteEvent(SiteId site, Vector2d position) noexcept
-        : Event(EventType::Site), m_site(site), m_position(position) {};
+        : Event(EventType::Site), m_site(site), m_position(position) {}
 
-    SiteId site() const noexcept {
+    [[nodiscard]] SiteId site() const noexcept {
         return m_site;
-    };
+    }
 
-    Vector2d position() const noexcept {
+    [[nodiscard]] Vector2d position() const noexcept override {
         return m_position;
-    };
+    }
 
 private:
     SiteId m_site{INVALID_ID};
@@ -42,48 +49,74 @@ private:
 
 class CircleEvent : public Event {
 public:
-    CircleEvent(Vector2d focusLeft,
+    CircleEvent(Arc *arc,
+                SiteId leftFocus,
+                SiteId centerFocus,
+                SiteId rightFocus,
+                Vector2d focusLeft,
                 Vector2d focusCenter,
-                Vector2d focusRight) noexcept
-        : Event(EventType::Circle), m_circle(focusLeft, focusCenter, focusRight) {};
+                Vector2d focusRight)
+        : Event(EventType::Circle),
+          m_arc(arc),
+          m_leftFocus(leftFocus),
+          m_centerFocus(centerFocus),
+          m_rightFocus(rightFocus),
+          m_circle(focusLeft, focusCenter, focusRight) {}
 
-    bool isValid() const noexcept {
+    [[nodiscard]] Arc *arc() const noexcept {
+        return m_arc;
+    }
+
+    [[nodiscard]] SiteId leftFocus() const noexcept {
+        return m_leftFocus;
+    }
+
+    [[nodiscard]] SiteId centerFocus() const noexcept {
+        return m_centerFocus;
+    }
+
+    [[nodiscard]] SiteId rightFocus() const noexcept {
+        return m_rightFocus;
+    }
+
+    [[nodiscard]] bool isValid() const noexcept {
         return m_valid;
-    };
+    }
 
     void setInvalid() noexcept {
         m_valid = false;
-    };
+    }
 
-    Circle &circle() noexcept {
-        return m_circle;
-    };
+    [[nodiscard]] Vector2d position() const noexcept override {
+        const auto center = m_circle.center();
+        return {center.x, center.y - m_circle.radius()};
+    }
 
-    const Circle &circle() const noexcept {
+    [[nodiscard]] Circle &circle() noexcept {
         return m_circle;
-    };
+    }
+
+    [[nodiscard]] const Circle &circle() const noexcept {
+        return m_circle;
+    }
 
 private:
+    Arc *m_arc{nullptr};
+    SiteId m_leftFocus{INVALID_ID};
+    SiteId m_centerFocus{INVALID_ID};
+    SiteId m_rightFocus{INVALID_ID};
     Circle m_circle;
     bool m_valid{true};
 };
 
-// Implementation
+inline bool Event::operator<(const Event &other) const noexcept {
+    const auto lhs = position();
+    const auto rhs = other.position();
 
-inline bool Event::operator<(const Event &other) const noexcept  {
-    if (m_type == EventType::Circle && other.m_type == EventType::Site)
-        return true;
-    if (m_type == EventType::Site && other.m_type == EventType::Circle)
-        return false;
+    if (lhs.y != rhs.y)
+        return lhs.y < rhs.y;
+    if (lhs.x != rhs.x)
+        return lhs.x < rhs.x;
 
-    if (m_type == EventType::Site) {
-        auto lhs = static_cast<const SiteEvent *>(this);
-        auto rhs = static_cast<const SiteEvent *>(&other);
-        return lhs->position() < rhs->position();
-    } else {
-        auto lhs = static_cast<const CircleEvent *>(this)->circle().center();
-        auto rhs = static_cast<const CircleEvent *>(&other)->circle().center();
-
-        return lhs < rhs;
-    }
-};
+    return m_type == EventType::Circle && other.m_type == EventType::Site;
+}
