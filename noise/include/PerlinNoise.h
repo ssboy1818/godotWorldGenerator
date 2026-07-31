@@ -13,7 +13,14 @@ static std::uint64_t seed = 0;
 
 [[nodiscard]] double edgeDecay(const BoundingBox &worldBounds,
                                Vector2d decayRadius,
-                               double x,
-                               double y) noexcept;
+                               Vector2d pos) noexcept;
 
-};
+[[nodiscard]] double noise(const BoundingBox &worldBounds,
+                           Vector2d pos,
+                           Vector2d decayRadius,
+                           std::uint32_t octaves = 4,
+                           double baseFrequency = 0.01,
+                           double frequencyCoefficient = 2.0,
+                           double strengthCoefficient = 0.5) noexcept;
+
+} // namespace noise

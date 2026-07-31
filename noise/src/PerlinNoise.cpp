@@ -89,19 +89,52 @@ double perlinNoise(Vector2d pos, bool normalized) noexcept {
 
 double edgeDecay(const BoundingBox &worldBounds,
                  Vector2d decayRadius,
-                 double x,
-                 double y) noexcept {
-    if (!std::isfinite(x) || !std::isfinite(y)
+                 Vector2d pos) noexcept {
+    if (!std::isfinite(pos.x) || !std::isfinite(pos.y)
         || !std::isfinite(decayRadius.x) || !std::isfinite(decayRadius.y)
         || decayRadius.x <= 0.0 || decayRadius.y <= 0.0) {
         return std::numeric_limits<double>::quiet_NaN();
     }
 
-    const auto distanceX = std::min(x - worldBounds.min.x, worldBounds.max.x - x);
-    const auto distanceY = std::min(y - worldBounds.min.y, worldBounds.max.y - y);
+    const auto distanceX = std::min(pos.x - worldBounds.min.x, worldBounds.max.x - pos.x);
+    const auto distanceY = std::min(pos.y - worldBounds.min.y, worldBounds.max.y - pos.y);
     const auto xMask = std::clamp(1.0 - distanceX / decayRadius.x, 0.0, 1.0);
     const auto yMask = std::clamp(1.0 - distanceY / decayRadius.y, 0.0, 1.0);
     return std::max(xMask, yMask);
 }
 
-};
+double noise(const BoundingBox &worldBounds,
+             Vector2d pos,
+             Vector2d decayRadius,
+             std::uint32_t octaves,
+             double baseFrequency,
+             double frequencyCoefficient,
+             double strengthCoefficient) noexcept {
+    if (octaves == 0
+        || !std::isfinite(baseFrequency) || baseFrequency <= 0.0
+        || !std::isfinite(frequencyCoefficient) || frequencyCoefficient <= 0.0
+        || !std::isfinite(strengthCoefficient) || strengthCoefficient < 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    auto frequency = baseFrequency;
+    auto strength = 1.0;
+    auto totalStrength = 0.0;
+    auto value = 0.0;
+
+    for (std::uint32_t octave = 0; octave < octaves; ++octave) {
+        if (!std::isfinite(frequency) || !std::isfinite(strength))
+            return std::numeric_limits<double>::quiet_NaN();
+
+        value += perlinNoise(pos * frequency, true) * strength;
+        totalStrength += strength;
+        frequency *= frequencyCoefficient;
+        strength *= strengthCoefficient;
+    }
+
+    return std::lerp(value / totalStrength,
+                     0.0,
+                     edgeDecay(worldBounds, decayRadius, pos));
+}
+
+} // namespace noise
