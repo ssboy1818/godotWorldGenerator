@@ -7,7 +7,7 @@
 
 namespace noise {
 
-static std::uint64_t seed = 0;
+extern std::uint64_t seed;
 
 [[nodiscard]] double perlinNoise(Vector2d pos, bool normalized = false) noexcept;
 

@@ -16,6 +16,7 @@ public:
                           const BoundingBox &boundingBox);
 
     const DCEL &dcel() const noexcept;
+    DCEL takeDcel() noexcept;
 
 private:
     BeachLine m_beachline;

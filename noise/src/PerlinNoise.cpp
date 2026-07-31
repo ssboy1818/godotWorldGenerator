@@ -55,6 +55,8 @@ double gradientDot(std::int64_t x, std::int64_t y, double offsetX, double offset
 
 namespace noise {
 
+std::uint64_t seed = 0;
+
 double perlinNoise(Vector2d pos, bool normalized) noexcept {
     if (!std::isfinite(pos.x) || !std::isfinite(pos.y))
         return std::numeric_limits<double>::quiet_NaN();

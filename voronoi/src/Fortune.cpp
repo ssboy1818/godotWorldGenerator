@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <numeric>
+#include <queue>
 #include <stdexcept>
 
 namespace {
@@ -43,6 +45,214 @@ std::pair<Vector2d, Vector2d> clippedBisector(const Vector2d &left,
             {midpoint.x + direction.x * end, midpoint.y + direction.y * end}};
 }
 
+double halfPlaneValue(Vector2d point, Vector2d normal, double offset) noexcept {
+    return point.x * normal.x + point.y * normal.y - offset;
+}
+
+std::vector<Vector2d> clipPolygon(const std::vector<Vector2d> &input,
+                                  Vector2d normal,
+                                  double offset) {
+    std::vector<Vector2d> output;
+    if (input.empty())
+        return output;
+
+    output.reserve(input.size() + 1);
+    auto previous = input.back();
+    auto previousValue = halfPlaneValue(previous, normal, offset);
+    auto previousInside = previousValue <= EPS;
+
+    for (const auto &current : input) {
+        const auto currentValue = halfPlaneValue(current, normal, offset);
+        const auto currentInside = currentValue <= EPS;
+
+        if (currentInside != previousInside) {
+            const auto amount = previousValue / (previousValue - currentValue);
+            output.push_back(previous + (current - previous) * amount);
+        }
+        if (currentInside)
+            output.push_back(current);
+
+        previous = current;
+        previousValue = currentValue;
+        previousInside = currentInside;
+    }
+
+    return output;
+}
+
+class NearestSiteIndex {
+public:
+    explicit NearestSiteIndex(const std::vector<Site> &sites)
+        : m_sites(sites), m_order(sites.size()) {
+        std::iota(m_order.begin(), m_order.end(), SiteId{0});
+        build(0, m_order.size(), 0);
+    }
+
+    [[nodiscard]] std::vector<SiteId> nearest(SiteId target,
+                                               std::size_t count) const {
+        CandidateHeap candidates;
+        search(0,
+               m_order.size(),
+               0,
+               target,
+               m_sites[static_cast<std::size_t>(target)].position,
+               count,
+               candidates);
+
+        std::vector<SiteId> result;
+        result.reserve(candidates.size());
+        while (!candidates.empty()) {
+            result.push_back(candidates.top().second);
+            candidates.pop();
+        }
+        return result;
+    }
+
+private:
+    using Candidate = std::pair<double, SiteId>;
+    using CandidateHeap = std::priority_queue<Candidate>;
+
+    const std::vector<Site> &m_sites;
+    std::vector<SiteId> m_order;
+
+    [[nodiscard]] double coordinate(SiteId site, std::size_t axis) const noexcept {
+        const auto &position = m_sites[static_cast<std::size_t>(site)].position;
+        return axis == 0 ? position.x : position.y;
+    }
+
+    void build(std::size_t begin, std::size_t end, std::size_t depth) {
+        if (begin >= end)
+            return;
+
+        const auto middle = begin + (end - begin) / 2;
+        const auto axis = depth % 2;
+        std::nth_element(
+            m_order.begin() + static_cast<std::ptrdiff_t>(begin),
+            m_order.begin() + static_cast<std::ptrdiff_t>(middle),
+            m_order.begin() + static_cast<std::ptrdiff_t>(end),
+            [this, axis](SiteId left, SiteId right) {
+                return coordinate(left, axis) < coordinate(right, axis);
+            });
+        build(begin, middle, depth + 1);
+        build(middle + 1, end, depth + 1);
+    }
+
+    void search(std::size_t begin,
+                std::size_t end,
+                std::size_t depth,
+                SiteId target,
+                Vector2d position,
+                std::size_t count,
+                CandidateHeap &candidates) const {
+        if (begin >= end || count == 0)
+            return;
+
+        const auto middle = begin + (end - begin) / 2;
+        const auto site = m_order[middle];
+        const auto axis = depth % 2;
+        const auto delta = (axis == 0 ? position.x : position.y) - coordinate(site, axis);
+        const auto nearBegin = delta < 0.0 ? begin : middle + 1;
+        const auto nearEnd = delta < 0.0 ? middle : end;
+        const auto farBegin = delta < 0.0 ? middle + 1 : begin;
+        const auto farEnd = delta < 0.0 ? end : middle;
+
+        search(nearBegin,
+               nearEnd,
+               depth + 1,
+               target,
+               position,
+               count,
+               candidates);
+
+        if (site != target) {
+            const auto distance = (m_sites[static_cast<std::size_t>(site)].position - position)
+                                      .squaredLength();
+            if (candidates.size() < count) {
+                candidates.emplace(distance, site);
+            } else if (distance < candidates.top().first) {
+                candidates.pop();
+                candidates.emplace(distance, site);
+            }
+        }
+
+        if (candidates.size() < count || delta * delta <= candidates.top().first) {
+            search(farBegin,
+                   farEnd,
+                   depth + 1,
+                   target,
+                   position,
+                   count,
+                   candidates);
+        }
+    }
+};
+
+std::vector<std::vector<SiteId>> collectCellNeighbors(const DCEL &diagram) {
+    std::vector<std::vector<SiteId>> neighbors(diagram.polygons().size());
+
+    for (const auto &edge : diagram.edges()) {
+        if (edge.twin == INVALID_ID || edge.id > edge.twin || edge.face == INVALID_ID)
+            continue;
+
+        const auto &twin = diagram.edge(edge.twin);
+        if (twin.face == INVALID_ID || twin.face == edge.face)
+            continue;
+
+        const auto &firstCell = diagram.polygon(edge.face);
+        const auto &secondCell = diagram.polygon(twin.face);
+        neighbors[static_cast<std::size_t>(firstCell.id)].push_back(secondCell.site);
+        neighbors[static_cast<std::size_t>(secondCell.id)].push_back(firstCell.site);
+    }
+
+    constexpr std::size_t supplementalNeighborCount = 12;
+    const NearestSiteIndex siteIndex{diagram.sites()};
+    for (const auto &cell : diagram.polygons()) {
+        auto nearest = siteIndex.nearest(cell.site, supplementalNeighborCount);
+        auto &cellNeighbors = neighbors[static_cast<std::size_t>(cell.id)];
+        cellNeighbors.insert(cellNeighbors.end(), nearest.begin(), nearest.end());
+    }
+
+    for (auto &cellNeighbors : neighbors) {
+        std::ranges::sort(cellNeighbors);
+        const auto duplicates = std::ranges::unique(cellNeighbors);
+        cellNeighbors.erase(duplicates.begin(), duplicates.end());
+    }
+
+    return neighbors;
+}
+
+void finishBoundedFaces(DCEL &diagram, const BoundingBox &boundingBox) {
+    const auto neighbors = collectCellNeighbors(diagram);
+    const auto cellCount = diagram.polygons().size();
+
+    for (std::size_t index = 0; index < cellCount; ++index) {
+        const auto cellId = static_cast<PolygonId>(index);
+        const auto siteId = diagram.polygon(cellId).site;
+        const auto &site = diagram.site(siteId);
+        std::vector<Vector2d> boundary{
+            boundingBox.min,
+            {boundingBox.max.x, boundingBox.min.y},
+            boundingBox.max,
+            {boundingBox.min.x, boundingBox.max.y},
+        };
+
+        for (const auto neighbor : neighbors[index]) {
+            const auto &other = diagram.site(neighbor);
+            const auto normal = other.position - site.position;
+            const auto offset = (other.position.squaredLength()
+                                 - site.position.squaredLength())
+                                * 0.5;
+            boundary = clipPolygon(boundary, normal, offset);
+        }
+
+        std::vector<VertexId> vertices;
+        vertices.reserve(boundary.size());
+        for (const auto point : boundary)
+            vertices.push_back(diagram.addVertex(point));
+        diagram.polygon(cellId).vertices = std::move(vertices);
+    }
+}
+
 }
 
 void Fortune::calculateVoronoi(const std::vector<Site> &sites,
@@ -68,10 +278,15 @@ void Fortune::calculateVoronoi(const std::vector<Site> &sites,
     }
 
     finishOpenEdges(boundingBox);
+    finishBoundedFaces(m_dcel, boundingBox);
 }
 
 const DCEL &Fortune::dcel() const noexcept {
     return m_dcel;
+}
+
+DCEL Fortune::takeDcel() noexcept {
+    return std::move(m_dcel);
 }
 
 void Fortune::addSiteEvents(const std::vector<Site> &sites) {

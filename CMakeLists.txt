@@ -8,9 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_subdirectory(geometry)
 add_subdirectory(voronoi)
 add_subdirectory(noise)
+add_subdirectory(terrain)
 
 add_executable(worldgen main.cpp)
-target_link_libraries(worldgen PRIVATE worldgen::voronoi)
+target_link_libraries(worldgen PRIVATE worldgen::terrain)
 
 include(GNUInstallDirs)
 install(TARGETS worldgen
