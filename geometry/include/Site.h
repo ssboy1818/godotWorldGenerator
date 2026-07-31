@@ -46,7 +46,7 @@ inline Site::Site(Vector2d position_) noexcept
     : position(position_) {}
 
 inline Site::Site(const Site &other) noexcept
-    : position(other.position) {}
+    : id(other.id), position(other.position) {}
 
 inline Site::Site(Site &&other) noexcept
     : id(other.id), position(other.position) {
