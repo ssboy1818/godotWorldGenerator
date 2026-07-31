@@ -10,6 +10,7 @@ include_directories(voronoi/include)
 
 add_executable(worldgen main.cpp
     geometry/include/Vector2.h
+    geometry/include/BoundingBox.h
     geometry/include/Site.h
     geometry/include/Edge.h
     geometry/include/DCEL.h

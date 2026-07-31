@@ -1,13 +1,61 @@
 #include "Fortune.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 
-void Fortune::calculateVoronoi(const std::vector<Site> &sites) {
+namespace {
+
+bool clipAxis(double origin,
+              double direction,
+              double minimum,
+              double maximum,
+              double &start,
+              double &end) {
+    if (std::abs(direction) < EPS)
+        return origin >= minimum && origin <= maximum;
+
+    auto first = (minimum - origin) / direction;
+    auto second = (maximum - origin) / direction;
+    if (first > second)
+        std::swap(first, second);
+
+    start = std::max(start, first);
+    end = std::min(end, second);
+    return start <= end;
+}
+
+std::pair<Vector2d, Vector2d> clippedBisector(const Vector2d &left,
+                                               const Vector2d &right,
+                                               const BoundingBox &boundingBox) {
+    const Vector2d midpoint{(left.x + right.x) / 2.0, (left.y + right.y) / 2.0};
+    const Vector2d direction{left.y - right.y, right.x - left.x};
+    auto start = -std::numeric_limits<double>::infinity();
+    auto end = std::numeric_limits<double>::infinity();
+
+    if (!clipAxis(midpoint.x, direction.x, boundingBox.min.x, boundingBox.max.x, start, end)
+        || !clipAxis(midpoint.y, direction.y, boundingBox.min.y, boundingBox.max.y, start, end))
+        throw std::logic_error("The Voronoi bisector does not intersect the bounding box.");
+
+    return {{midpoint.x + direction.x * start, midpoint.y + direction.y * start},
+            {midpoint.x + direction.x * end, midpoint.y + direction.y * end}};
+}
+
+}
+
+void Fortune::calculateVoronoi(const std::vector<Site> &sites,
+                               const BoundingBox &boundingBox) {
     m_events.clear();
     m_beachline.clear();
     m_dcel.clear();
     m_siteFaces.clear();
+
+    for (const auto &site : sites) {
+        if (!boundingBox.contains(site.position))
+            throw std::invalid_argument("Every site must lie inside the bounding box.");
+    }
 
     addSiteEvents(sites);
 
@@ -18,6 +66,8 @@ void Fortune::calculateVoronoi(const std::vector<Site> &sites) {
         else
             handleCircleEvent(static_cast<CircleEvent *>(event));
     }
+
+    finishOpenEdges(boundingBox);
 }
 
 const DCEL &Fortune::dcel() const noexcept {
@@ -173,4 +223,45 @@ std::pair<EdgeId, EdgeId> Fortune::createEdgePair(BeachLine::Node *left,
 void Fortune::setFaceBoundary(PolygonId face, EdgeId edge) {
     if (m_dcel.polygon(face).edge == INVALID_ID)
         m_dcel.setPolygonBoundary(face, edge);
+}
+
+void Fortune::finishOpenEdges(const BoundingBox &boundingBox) {
+    const auto edgeCount = m_dcel.edges().size();
+    for (std::size_t index = 0; index < edgeCount; ++index) {
+        const auto edge = static_cast<EdgeId>(index);
+        if (m_dcel.edge(edge).twin < edge)
+            continue;
+
+        finishEdgePair(edge, boundingBox);
+    }
+}
+
+void Fortune::finishEdgePair(EdgeId edgeId, const BoundingBox &boundingBox) {
+    const auto twinId = m_dcel.edge(edgeId).twin;
+    if (twinId == INVALID_ID)
+        throw std::logic_error("A Voronoi edge must have a twin.");
+
+    const auto &edge = m_dcel.edge(edgeId);
+    const auto &twin = m_dcel.edge(twinId);
+    if (edge.origin != INVALID_ID && twin.origin != INVALID_ID)
+        return;
+
+    const auto &leftSite = m_dcel.site(m_dcel.polygon(edge.face).site).position;
+    const auto &rightSite = m_dcel.site(m_dcel.polygon(twin.face).site).position;
+    const auto endpoints = clippedBisector(leftSite, rightSite, boundingBox);
+
+    if (edge.origin == INVALID_ID)
+        m_dcel.setOrigin(edgeId, boundaryVertex(endpoints.first));
+    if (twin.origin == INVALID_ID)
+        m_dcel.setOrigin(twinId, boundaryVertex(endpoints.second));
+}
+
+VertexId Fortune::boundaryVertex(Vector2d position) {
+    for (const auto &vertex : m_dcel.vertices()) {
+        if (std::abs(vertex.position.x - position.x) < EPS
+            && std::abs(vertex.position.y - position.y) < EPS)
+            return vertex.id;
+    }
+
+    return m_dcel.addVertex(position);
 }

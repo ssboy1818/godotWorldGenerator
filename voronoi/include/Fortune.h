@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BeachLine.h"
+#include "BoundingBox.h"
 #include "DCEL.h"
 #include "EventQueue.h"
 
@@ -11,7 +12,8 @@ class Fortune {
 public:
     Fortune() noexcept = default;
 
-    void calculateVoronoi(const std::vector<Site> &sites);
+    void calculateVoronoi(const std::vector<Site> &sites,
+                          const BoundingBox &boundingBox);
 
     const DCEL &dcel() const noexcept;
 
@@ -34,4 +36,8 @@ private:
     std::pair<EdgeId, EdgeId> createEdgePair(BeachLine::Node *left,
                                              BeachLine::Node *right);
     void setFaceBoundary(PolygonId face, EdgeId edge);
+
+    void finishOpenEdges(const BoundingBox &boundingBox);
+    void finishEdgePair(EdgeId edge, const BoundingBox &boundingBox);
+    VertexId boundaryVertex(Vector2d position);
 };
