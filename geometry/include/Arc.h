@@ -1,17 +1,15 @@
 #pragma once
 
 #include "Id.h"
-#include "Vector2.h"
+
+class CircleEvent;
 
 class Arc {
 public:
     SiteId focus{INVALID_ID};
-    Vector2d topLimit;
+    CircleEvent *pendingEvent{nullptr};
+    EdgeId rightEdge{INVALID_ID};
 
 public:
-    explicit Arc(SiteId site) noexcept : focus(site) {};
-
-    bool operator<(const Arc &other) const noexcept {
-        return topLimit < other.topLimit;
-    };
+    explicit Arc(SiteId site) noexcept : focus(site) {}
 };

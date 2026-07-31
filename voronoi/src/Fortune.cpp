@@ -27,8 +27,17 @@ void Fortune::addSiteEvents(const std::vector<Site> &sites) {
 }
 
 void Fortune::handleSiteEvent(SiteEvent *event) {
-    if (m_beachline.arcs().empty())
-        m_beachline.insert(Arc{event->site()});
+    if (m_beachline.empty()) {
+        m_beachline.insertFirst(Arc{event->site()});
+        return;
+    }
+
+    auto *arc = m_beachline.findArcAbove(event->position().x,
+                                         event->position().y,
+                                         m_dcel);
+    auto result = m_beachline.split(arc, Arc{event->site()});
+    if (result.invalidatedEvent != nullptr)
+        result.invalidatedEvent->setInvalid();
 }
 
 void Fortune::handleCircleEvent(CircleEvent *event) {
