@@ -42,17 +42,18 @@ struct MoreExpensiveClaim {
     }
 };
 
-[[nodiscard]] bool segmentsShareBoundary(Vector2d firstStart,
-                                         Vector2d firstEnd,
-                                         Vector2d secondStart,
-                                         Vector2d secondEnd,
-                                         double tolerance) noexcept {
+[[nodiscard]] double segmentSharedBoundaryLength(
+    Vector2d firstStart,
+    Vector2d firstEnd,
+    Vector2d secondStart,
+    Vector2d secondEnd,
+    double tolerance) noexcept {
     const auto firstDirection = firstEnd - firstStart;
     const auto secondDirection = secondEnd - secondStart;
     const auto firstLength = firstDirection.length();
     const auto secondLength = secondDirection.length();
     if (firstLength <= tolerance || secondLength <= tolerance)
-        return false;
+        return 0.0;
 
     const Vector2d unit{firstDirection.x / firstLength,
                         firstDirection.y / firstLength};
@@ -62,7 +63,7 @@ struct MoreExpensiveClaim {
     };
     if (perpendicularDistance(secondStart) > tolerance
         || perpendicularDistance(secondEnd) > tolerance) {
-        return false;
+        return 0.0;
     }
 
     const auto project = [&](Vector2d point) {
@@ -76,7 +77,31 @@ struct MoreExpensiveClaim {
 
     const auto overlap = std::min(firstLength, secondMaximum)
                          - std::max(0.0, secondMinimum);
-    return overlap > tolerance;
+    return overlap > tolerance ? overlap : 0.0;
+}
+
+[[nodiscard]] double sharedBoundaryLength(const Cell &firstCell,
+                                          const Cell &secondCell,
+                                          double tolerance) noexcept {
+    auto length = 0.0;
+    for (std::size_t firstEdge = 0;
+         firstEdge < firstCell.vertices.size();
+         ++firstEdge) {
+        const auto firstNext = (firstEdge + 1) % firstCell.vertices.size();
+        for (std::size_t secondEdge = 0;
+             secondEdge < secondCell.vertices.size();
+             ++secondEdge) {
+            const auto secondNext = (secondEdge + 1)
+                                    % secondCell.vertices.size();
+            length += segmentSharedBoundaryLength(
+                firstCell.vertices[firstEdge],
+                firstCell.vertices[firstNext],
+                secondCell.vertices[secondEdge],
+                secondCell.vertices[secondNext],
+                tolerance);
+        }
+    }
+    return length;
 }
 
 [[nodiscard]] bool riverEdgeTouchesCell(const Cell &riverCell,
@@ -97,11 +122,12 @@ struct MoreExpensiveClaim {
              otherEdge < otherCell.vertices.size();
              ++otherEdge) {
             const auto otherNext = (otherEdge + 1) % otherCell.vertices.size();
-            if (segmentsShareBoundary(riverCell.vertices[edge],
-                                      riverCell.vertices[riverNext],
-                                      otherCell.vertices[otherEdge],
-                                      otherCell.vertices[otherNext],
-                                      tolerance)) {
+            if (segmentSharedBoundaryLength(riverCell.vertices[edge],
+                                            riverCell.vertices[riverNext],
+                                            otherCell.vertices[otherEdge],
+                                            otherCell.vertices[otherNext],
+                                            tolerance)
+                > 0.0) {
                 return true;
             }
         }
@@ -432,7 +458,28 @@ std::vector<Province> generateProvinces(
     double elevationContribution,
     double distanceContribution,
     double baseCost,
-    std::size_t minimumRegionCount) {
+    std::size_t minimumRegionCount,
+    double shortBorderContribution) {
+    if (!std::isfinite(startScore) || startScore < 0.0
+        || !std::isfinite(riverContribution) || riverContribution < 0.0
+        || !std::isfinite(elevationContribution)
+        || elevationContribution < 0.0
+        || !std::isfinite(distanceContribution)
+        || distanceContribution < 0.0
+        || !std::isfinite(baseCost) || baseCost < 0.0
+        || !std::isfinite(shortBorderContribution)
+        || shortBorderContribution < 0.0) {
+        throw std::invalid_argument(
+            "Province scores, costs, and contributions must be finite and non-negative.");
+    }
+    if (!std::isfinite(baseCost
+                       + riverContribution
+                       + elevationContribution
+                       + distanceContribution
+                       + shortBorderContribution)) {
+        throw std::invalid_argument(
+            "The maximum province claim cost must be finite.");
+    }
     if (minimumRegionCount == 0) {
         throw std::invalid_argument(
             "The minimum province region count must be positive.");
@@ -443,6 +490,20 @@ std::vector<Province> generateProvinces(
     const auto indexedRegions = indexRegions(division, regions);
     const auto sharedEdgeTolerance = numericalToleranceFor(boundingBox)
                                          .sharedEdgeLength();
+    auto averageCellLength = 0.0;
+    if (shortBorderContribution > 0.0) {
+        const auto width = static_cast<long double>(boundingBox.max.x)
+                           - static_cast<long double>(boundingBox.min.x);
+        const auto height = static_cast<long double>(boundingBox.max.y)
+                            - static_cast<long double>(boundingBox.min.y);
+        averageCellLength = static_cast<double>(std::sqrt(
+            width * height
+            / static_cast<long double>(division.cells.size())));
+        if (!std::isfinite(averageCellLength) || averageCellLength <= 0.0) {
+            throw std::logic_error(
+                "Province generation could not determine an average cell length.");
+        }
+    }
     std::vector<bool> assigned(regions.size(), false);
     for (std::size_t region = 0; region < indexedRegions.size(); ++region)
         assigned[region] = indexedRegions[region]->isWater();
@@ -492,10 +553,30 @@ std::vector<Province> generateProvinces(
                     boundingBox,
                     provinceCenter,
                     division.cells[neighborIndex].sitePosition);
+                auto shortBorderPenalty = 0.0;
+                if (shortBorderContribution > 0.0) {
+                    const auto borderLength = sharedBoundaryLength(
+                        fromCell,
+                        division.cells[neighborIndex],
+                        sharedEdgeTolerance);
+                    if (!std::isfinite(borderLength)
+                        || borderLength <= sharedEdgeTolerance) {
+                        throw std::logic_error(
+                            "Neighboring regions do not share a measurable border.");
+                    }
+                    shortBorderPenalty = shortBorderContribution
+                                         * std::clamp(
+                                             1.0
+                                                 - borderLength
+                                                       / averageCellLength,
+                                             0.0,
+                                             1.0);
+                }
                 const auto cost = baseCost
                                   + elevationContribution * elevationDifference
                                   + distanceContribution * distance
-                                  + (crossesRiver ? riverContribution : 0.0);
+                                  + (crossesRiver ? riverContribution : 0.0)
+                                  + shortBorderPenalty;
                 if (!std::isfinite(cost) || cost < 0.0) {
                     throw std::logic_error(
                         "Province generation produced an invalid claim cost.");

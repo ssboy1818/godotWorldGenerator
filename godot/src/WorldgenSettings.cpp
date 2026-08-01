@@ -122,6 +122,12 @@ void WorldgenSettings::_bind_methods() {
         godot::D_METHOD("get_province_distance_contribution"),
         &WorldgenSettings::provinceDistanceContribution);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_short_border_contribution", "contribution"),
+        &WorldgenSettings::setProvinceShortBorderContribution);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_short_border_contribution"),
+        &WorldgenSettings::provinceShortBorderContribution);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("set_province_base_cost", "cost"),
         &WorldgenSettings::setProvinceBaseCost);
     godot::ClassDB::bind_method(
@@ -264,6 +270,12 @@ void WorldgenSettings::_bind_methods() {
                                      "0,1000,0.01,or_greater"),
                  "set_province_distance_contribution",
                  "get_province_distance_contribution");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "province_short_border_contribution",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1000,0.01,or_greater"),
+                 "set_province_short_border_contribution",
+                 "get_province_short_border_contribution");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
                                      "province_base_cost",
                                      godot::PROPERTY_HINT_RANGE,
@@ -467,6 +479,15 @@ void WorldgenSettings::setProvinceDistanceContribution(double contribution) {
 
 double WorldgenSettings::provinceDistanceContribution() const noexcept {
     return m_provinceDistanceContribution;
+}
+
+void WorldgenSettings::setProvinceShortBorderContribution(
+    double contribution) {
+    m_provinceShortBorderContribution = contribution;
+}
+
+double WorldgenSettings::provinceShortBorderContribution() const noexcept {
+    return m_provinceShortBorderContribution;
 }
 
 void WorldgenSettings::setProvinceBaseCost(double cost) {

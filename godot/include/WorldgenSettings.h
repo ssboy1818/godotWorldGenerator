@@ -86,6 +86,9 @@ public:
     void setProvinceDistanceContribution(double contribution);
     [[nodiscard]] double provinceDistanceContribution() const noexcept;
 
+    void setProvinceShortBorderContribution(double contribution);
+    [[nodiscard]] double provinceShortBorderContribution() const noexcept;
+
     void setProvinceBaseCost(double cost);
     [[nodiscard]] double provinceBaseCost() const noexcept;
 
@@ -120,6 +123,7 @@ private:
     double m_provinceRiverContribution{5.0};
     double m_provinceElevationContribution{10.0};
     double m_provinceDistanceContribution{5.0};
+    double m_provinceShortBorderContribution{5.0};
     double m_provinceBaseCost{1.0};
     std::int64_t m_provinceMinimumRegionCount{3};
 };

@@ -659,6 +659,7 @@ void testProvinceBudgets() {
         .provinceRiverContribution = 0.0,
         .provinceElevationContribution = 0.0,
         .provinceDistanceContribution = 0.0,
+        .provinceShortBorderContribution = 0.0,
         .provinceBaseCost = 1.0,
         .provinceMinimumRegionCount = 1,
     };
@@ -723,7 +724,8 @@ void testProvinceCostOrdering() {
                                  1.0,
                                  0.0,
                                  0.0,
-                                 1);
+                                 1,
+                                 0.0);
     };
 
     const auto epsilonTied = generate(0.75 * EPS, 0.25 * EPS);
@@ -739,6 +741,75 @@ void testProvinceCostOrdering() {
     require(distinct.front().regionIds()
                 == std::vector<RegionId>{0, 2, 1},
             "Province growth did not choose the cheapest frontier claim.");
+}
+
+void testProvinceShortBorderPenalty() {
+    const BoundingBox bounds{{0.0, 0.0}, {5.0, 4.0}};
+    const WorldDivision division{
+        .cells = {
+            {
+                .id = 0,
+                .sitePosition = {2.0, 2.0},
+                .vertices = {{0.0, 0.0},
+                             {4.0, 0.0},
+                             {4.0, 4.0},
+                             {0.0, 4.0}},
+                .neighbors = {1, 2},
+            },
+            {
+                .id = 1,
+                .sitePosition = {4.5, 0.5},
+                .vertices = {{4.0, 0.0},
+                             {5.0, 0.0},
+                             {5.0, 1.0},
+                             {4.0, 1.0}},
+                .neighbors = {0},
+            },
+            {
+                .id = 2,
+                .sitePosition = {4.5, 2.5},
+                .vertices = {{4.0, 1.0},
+                             {5.0, 1.0},
+                             {5.0, 4.0},
+                             {4.0, 4.0}},
+                .neighbors = {0},
+            },
+        },
+    };
+    const auto generate = [&](double shortBorderContribution) {
+        std::vector<Region> regions;
+        for (CellId cell = 0; cell < division.cells.size(); ++cell) {
+            regions.emplace_back(cell,
+                                 0.0,
+                                 0.0,
+                                 division.cells[cell].vertices.size(),
+                                 0.0,
+                                 0.0,
+                                 0.0);
+        }
+        return generateProvinces(bounds,
+                                 division,
+                                 regions,
+                                 10.0,
+                                 0.0,
+                                 0.0,
+                                 0.0,
+                                 0.0,
+                                 1,
+                                 shortBorderContribution);
+    };
+
+    const auto disabled = generate(0.0);
+    require(disabled.front().regionIds()
+                == std::vector<RegionId>{0, 1, 2},
+            "Disabled short-border cost changed province claim ordering.");
+
+    const auto enabled = generate(5.0);
+    require(enabled.size() == 1,
+            "Short-border cost unexpectedly split an affordable province.");
+    require(enabled.front().regionIds()
+                == std::vector<RegionId>{0, 2, 1},
+            "A longer shared border was not preferred over a short border.");
 }
 
 void testSmallProvinceMerging() {
@@ -775,7 +846,8 @@ void testSmallProvinceMerging() {
                                                   3.0,
                                                   0.0,
                                                   1.0,
-                                                  3);
+                                                  3,
+                                                  0.0);
     require(splitProvinces.size() == 2,
             "An undersized province with neighbors was not deleted.");
     require(splitProvinces[0].regionIds()
@@ -811,7 +883,8 @@ void testSmallProvinceMerging() {
                                             0.0,
                                             0.0,
                                             1.0,
-                                            3);
+                                            3,
+                                            0.0);
     require(combined.size() == 1,
             "A connected group of small provinces did not retain one target.");
     require(combined.front().regionIds()
@@ -840,7 +913,8 @@ void testSmallProvinceMerging() {
                                             0.0,
                                             0.0,
                                             1.0,
-                                            3);
+                                            3,
+                                            0.0);
     require(isolated.size() == 1 && isolated.front().regionIds().size() == 2,
             "An undersized province without another province was deleted.");
 }
@@ -861,6 +935,9 @@ void testProvinceSettingsValidation() {
     requireNear(settings.provinceDistanceContribution,
                 5.0,
                 "The default province distance contribution must be 5.");
+    requireNear(settings.provinceShortBorderContribution,
+                5.0,
+                "The default province short-border contribution must be 5.");
     requireNear(settings.provinceBaseCost,
                 1.0,
                 "The default province base cost must be 1.");
@@ -913,6 +990,14 @@ void testProvinceSettingsValidation() {
         require(false, "A zero minimum province region count was accepted.");
     } catch (const std::invalid_argument &) {
     }
+
+    settings.provinceMinimumRegionCount = 3;
+    settings.provinceShortBorderContribution = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative province short-border contribution was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
 }
 
 void testRivers() {
@@ -933,6 +1018,7 @@ void testRivers() {
         .riverMinimumSourceElevation = 0.5,
         .riverRandomness = 0.35,
         .riverElevationTolerance = 0.03,
+        .provinceShortBorderContribution = 0.0,
         .provinceMinimumRegionCount = 1,
     };
     const auto world = WorldGenerator{settings}.generate();
@@ -1131,6 +1217,7 @@ int main() {
         testClimateSettingsValidation();
         testProvinceBudgets();
         testProvinceCostOrdering();
+        testProvinceShortBorderPenalty();
         testSmallProvinceMerging();
         testProvinceSettingsValidation();
         testRivers();

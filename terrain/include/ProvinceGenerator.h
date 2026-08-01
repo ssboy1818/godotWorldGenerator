@@ -19,6 +19,7 @@ namespace worldgen {
     double elevationContribution,
     double distanceContribution,
     double baseCost,
-    std::size_t minimumRegionCount = 3);
+    std::size_t minimumRegionCount = 3,
+    double shortBorderContribution = 0.0);
 
 } // namespace worldgen

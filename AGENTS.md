@@ -35,10 +35,10 @@ world or provide a complete visualization demo.
    confluences, split the network into linked river segments, and annotate the
    corresponding region edge indices.
 9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
-   river, normalized seed-distance, and base claim costs. Remove undersized
-   provinces through deterministic neighbor-based region reassignment, compact
-   the surviving IDs, and assign every land region a province ID while leaving
-   water regions unassigned.
+   river, normalized seed-distance, short shared-border, and base claim costs.
+   Remove undersized provinces through deterministic neighbor-based region
+   reassignment, compact the surviving IDs, and assign every land region a
+   province ID while leaving water regions unassigned.
 10. Return an immutable core `World` containing the bounds, diagram, regions,
     rivers, and provinces.
 11. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.

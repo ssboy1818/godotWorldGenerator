@@ -84,6 +84,7 @@ settings.province_start_score = 10.0
 settings.province_river_contribution = 5.0
 settings.province_elevation_contribution = 10.0
 settings.province_distance_contribution = 5.0
+settings.province_short_border_contribution = 5.0
 settings.province_base_cost = 1.0
 settings.province_minimum_region_count = 3
 generator.settings = settings
@@ -142,8 +143,15 @@ province_base_cost
     + province_elevation_contribution * abs(elevation[a] - elevation[b])
     + province_distance_contribution
         * distance(site[b], site[seed]) / world_bounds_diagonal
+    + province_short_border_contribution
+        * clamp(1 - shared_border_length(a, b) / average_cell_length, 0, 1)
     + province_river_contribution if their shared border carries a river
 ```
+
+Here `average_cell_length` is
+`sqrt(world_bounds_area / cell_count)`, so the short-border term is independent
+of world scale and site count. Borders at least that long add no penalty; shorter
+borders add progressively more, up to the configured contribution.
 
 The seed site is the stable center of its province, and the seed itself is free.
 At each step the generator selects the globally cheapest frontier transition;

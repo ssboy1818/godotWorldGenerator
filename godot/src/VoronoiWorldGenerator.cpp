@@ -99,6 +99,8 @@ namespace {
         .provinceRiverContribution = settings.provinceRiverContribution(),
         .provinceElevationContribution = settings.provinceElevationContribution(),
         .provinceDistanceContribution = settings.provinceDistanceContribution(),
+        .provinceShortBorderContribution =
+            settings.provinceShortBorderContribution(),
         .provinceBaseCost = settings.provinceBaseCost(),
         .provinceMinimumRegionCount =
             static_cast<std::size_t>(provinceMinimumRegionCount),
