@@ -72,6 +72,7 @@ settings.rows = 64
 settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
+settings.river_elevation_tolerance = 0.03
 generator.settings = settings
 
 var world: VoronoiWorldData = generator.generate()
@@ -101,3 +102,10 @@ to the shared segment below the confluence, or is `-1` at a mouth. This stores a
 merged downstream channel once while allowing a renderer to vary width by flow.
 `river_source_count` limits selected headwaters; the resulting `river_count` is
 the number of segments and may differ because the network is split at confluences.
+Sources are sampled from high land regions, and only candidates with a route to
+water are retained. A routing step may rise by at most
+`river_elevation_tolerance`, which helps rivers escape shallow local depressions.
+
+`cell_edge_rivers` parallels the flattened `vertices` array. Entry `j` identifies
+the river on the polygon edge from `vertices[j]` to the next vertex of that cell,
+or is `-1`. Use `cell_vertex_offsets` to find each cell's edge range.

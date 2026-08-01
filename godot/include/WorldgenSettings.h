@@ -59,6 +59,9 @@ public:
     void setRiverRandomness(double randomness);
     [[nodiscard]] double riverRandomness() const noexcept;
 
+    void setRiverElevationTolerance(double tolerance);
+    [[nodiscard]] double riverElevationTolerance() const noexcept;
+
 protected:
     static void _bind_methods();
 
@@ -78,6 +81,7 @@ private:
     std::int64_t m_riverSourceCount{12};
     double m_riverMinimumSourceElevation{0.6};
     double m_riverRandomness{0.25};
+    double m_riverElevationTolerance{0.03};
 };
 
 } // namespace worldgen

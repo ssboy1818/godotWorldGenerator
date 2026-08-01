@@ -73,6 +73,8 @@ void VoronoiWorldData::_bind_methods() {
                                 &VoronoiWorldData::riverOffsets);
     godot::ClassDB::bind_method(godot::D_METHOD("get_river_downstream_indices"),
                                 &VoronoiWorldData::riverDownstreamIndices);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_cell_edge_rivers"),
+                                &VoronoiWorldData::cellEdgeRivers);
 
     BIND_CONSTANT(REGION_TYPE_WATER);
     BIND_CONSTANT(REGION_TYPE_LAND);
@@ -163,6 +165,12 @@ void VoronoiWorldData::_bind_methods() {
                                      "",
                                      readOnly),
                  "", "get_river_downstream_indices");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "cell_edge_rivers",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_cell_edge_rivers");
 }
 
 std::int64_t VoronoiWorldData::cellCount() const noexcept {
@@ -221,6 +229,10 @@ godot::PackedInt32Array VoronoiWorldData::riverDownstreamIndices() const {
     return m_riverDownstreamIndices;
 }
 
+godot::PackedInt32Array VoronoiWorldData::cellEdgeRivers() const {
+    return m_cellEdgeRivers;
+}
+
 void VoronoiWorldData::populate(const World &world) {
     const auto &boundingBox = world.boundingBox();
     m_bounds = {
@@ -256,6 +268,9 @@ void VoronoiWorldData::populate(const World &world) {
                  "Unable to allocate the neighbor offsets.");
     resizePacked(m_elevations, cells.size(), "Unable to allocate the elevation array.");
     resizePacked(m_regionTypes, cells.size(), "Unable to allocate the region type array.");
+    resizePacked(m_cellEdgeRivers,
+                 vertexCount,
+                 "Unable to allocate the cell edge river array.");
 
     auto *sites = m_sites.ptrw();
     auto *vertices = m_vertices.ptrw();
@@ -287,9 +302,13 @@ void VoronoiWorldData::populate(const World &world) {
 
     if (world.regions().size() != cells.size())
         throw std::logic_error("The generated world does not have one region per cell.");
+    const auto &rivers = world.rivers();
+    if (rivers.size() >= maximum)
+        throw std::length_error("The generated world has too many rivers for packed offsets.");
 
     auto *elevations = m_elevations.ptrw();
     auto *regionTypes = m_regionTypes.ptrw();
+    auto *cellEdgeRivers = m_cellEdgeRivers.ptrw();
     std::vector<bool> populated(cells.size(), false);
     for (const auto &region : world.regions()) {
         const auto cell = static_cast<std::size_t>(region.cell());
@@ -298,12 +317,23 @@ void VoronoiWorldData::populate(const World &world) {
 
         elevations[cell] = region.elevation();
         regionTypes[cell] = region.isWater() ? REGION_TYPE_WATER : REGION_TYPE_LAND;
+        if (region.edgeRivers().size() != cells[cell].vertices.size()) {
+            throw std::logic_error(
+                "A generated region does not have one river ID per polygon edge.");
+        }
+        const auto edgeOffset = static_cast<std::size_t>(cellVertexOffsets[cell]);
+        for (std::size_t edge = 0; edge < region.edgeRivers().size(); ++edge) {
+            const auto river = region.edgeRivers()[edge];
+            if (river != INVALID_RIVER_ID && river >= world.rivers().size()) {
+                throw std::logic_error(
+                    "A generated region edge references an invalid river.");
+            }
+            cellEdgeRivers[edgeOffset + edge] = river == INVALID_RIVER_ID
+                                                   ? -1
+                                                   : static_cast<std::int32_t>(river);
+        }
         populated[cell] = true;
     }
-
-    const auto &rivers = world.rivers();
-    if (rivers.size() >= maximum)
-        throw std::length_error("The generated world has too many rivers for packed offsets.");
 
     std::size_t riverNodeCount = 0;
     for (const auto &river : rivers) {

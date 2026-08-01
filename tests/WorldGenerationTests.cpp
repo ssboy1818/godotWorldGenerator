@@ -71,6 +71,62 @@ double riverVertexElevation(const World &world,
     return elevation / static_cast<double>(samples);
 }
 
+bool riverVertexTouchesWater(const World &world,
+                             Vector2d vertex,
+                             double coordinateTolerance) {
+    for (const auto &cell : world.division().cells) {
+        if (!world.regions().at(cell.id).isWater())
+            continue;
+        for (const auto &cellVertex : cell.vertices) {
+            if (pointsNear(vertex, cellVertex, coordinateTolerance))
+                return true;
+        }
+    }
+    return false;
+}
+
+bool riverVertexTouchesSourceCandidate(const World &world,
+                                       Vector2d vertex,
+                                       double minimumElevation,
+                                       double coordinateTolerance) {
+    for (const auto &cell : world.division().cells) {
+        const auto &region = world.regions().at(cell.id);
+        if (!region.isLand() || region.elevation() < minimumElevation)
+            continue;
+        for (const auto &cellVertex : cell.vertices) {
+            if (pointsNear(vertex, cellVertex, coordinateTolerance))
+                return true;
+        }
+    }
+    return false;
+}
+
+void requireRiverEdgeLinks(const World &world,
+                           RiverId river,
+                           Vector2d first,
+                           Vector2d second,
+                           double coordinateTolerance) {
+    auto linkedRegionEdges = std::size_t{0};
+    for (const auto &cell : world.division().cells) {
+        for (std::size_t edge = 0; edge < cell.vertices.size(); ++edge) {
+            const auto &start = cell.vertices[edge];
+            const auto &end = cell.vertices[(edge + 1) % cell.vertices.size()];
+            if (!((pointsNear(first, start, coordinateTolerance)
+                   && pointsNear(second, end, coordinateTolerance))
+                  || (pointsNear(first, end, coordinateTolerance)
+                      && pointsNear(second, start, coordinateTolerance)))) {
+                continue;
+            }
+
+            require(world.regions().at(cell.id).riverAtEdge(edge) == river,
+                    "A region edge does not reference its river segment.");
+            ++linkedRegionEdges;
+        }
+    }
+    require(linkedRegionEdges > 0,
+            "A river edge is not associated with any region edge.");
+}
+
 void testFractalNoise() {
     const Vector2d position{12.5, -3.75};
     constexpr std::uint64_t seed = 42;
@@ -222,6 +278,7 @@ void testRivers() {
         .riverSourceCount = 24,
         .riverMinimumSourceElevation = 0.5,
         .riverRandomness = 0.35,
+        .riverElevationTolerance = 0.03,
     };
     const auto world = WorldGenerator{settings}.generate();
     const auto repeated = WorldGenerator{settings}.generate();
@@ -242,6 +299,7 @@ void testRivers() {
 
     auto headwaterSegments = std::size_t{0};
     auto hasConfluence = false;
+    auto hasToleratedRise = false;
     std::vector<std::pair<Vector2d, Vector2d>> channelEdges;
 
     for (std::size_t riverIndex = 0;
@@ -257,11 +315,12 @@ void testRivers() {
 
         if (incomingSegments[riverIndex] == 0) {
             ++headwaterSegments;
-            require(riverVertexElevation(world,
-                                         river.nodes.front().vertex,
-                                         coordinateTolerance)
-                        >= settings.riverMinimumSourceElevation,
-                    "A river starts below the minimum source elevation.");
+            require(riverVertexTouchesSourceCandidate(
+                        world,
+                        river.nodes.front().vertex,
+                        settings.riverMinimumSourceElevation,
+                        coordinateTolerance),
+                    "A river does not start on a high land candidate region.");
             requireNear(river.nodes.front().strength,
                         1.0,
                         "A headwater river must start with unit strength.");
@@ -287,13 +346,25 @@ void testRivers() {
                                           node.vertex,
                                           coordinateTolerance),
                     "A river segment does not follow a cell boundary.");
-            require(riverVertexElevation(world,
-                                         node.vertex,
-                                         coordinateTolerance)
-                        < riverVertexElevation(world,
-                                               previous.vertex,
-                                               coordinateTolerance),
-                    "A river does not flow toward lower terrain.");
+            const auto previousElevation = riverVertexElevation(
+                world,
+                previous.vertex,
+                coordinateTolerance);
+            const auto nodeElevation = riverVertexElevation(world,
+                                                            node.vertex,
+                                                            coordinateTolerance);
+            require(nodeElevation
+                        <= previousElevation
+                               + settings.riverElevationTolerance
+                               + tolerance,
+                    "A river exceeds the configured elevation tolerance.");
+            hasToleratedRise = hasToleratedRise
+                               || nodeElevation > previousElevation + tolerance;
+            requireRiverEdgeLinks(world,
+                                  static_cast<RiverId>(riverIndex),
+                                  previous.vertex,
+                                  node.vertex,
+                                  coordinateTolerance);
 
             const auto edge = std::pair{previous.vertex, node.vertex};
             require(std::ranges::find(channelEdges, edge) == channelEdges.end(),
@@ -301,8 +372,13 @@ void testRivers() {
             channelEdges.push_back(edge);
         }
 
-        if (river.downstreamRiver == INVALID_RIVER_ID)
+        if (river.downstreamRiver == INVALID_RIVER_ID) {
+            require(riverVertexTouchesWater(world,
+                                            river.nodes.back().vertex,
+                                            coordinateTolerance),
+                    "A terminal river segment does not reach water.");
             continue;
+        }
 
         const auto &downstream = world.rivers()[river.downstreamRiver];
         require(river.nodes.back().vertex == downstream.nodes.front().vertex,
@@ -340,6 +416,15 @@ void testRivers() {
                     "Confluence strength is not the sum of incoming rivers.");
     }
     require(hasConfluence, "The river fixture did not exercise a confluence.");
+    require(hasToleratedRise,
+            "The river fixture did not exercise the elevation tolerance.");
+
+    for (const auto &region : world.regions()) {
+        for (const auto river : region.edgeRivers()) {
+            require(river == INVALID_RIVER_ID || river < world.rivers().size(),
+                    "A region edge references an invalid river segment.");
+        }
+    }
 
     auto disabledSettings = settings;
     disabledSettings.riverSourceCount = 0;
@@ -364,6 +449,14 @@ void testRiverSettingsValidation() {
     try {
         static_cast<void>(WorldGenerator{settings});
         require(false, "River randomness above one was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.riverRandomness = 0.25;
+    settings.riverElevationTolerance = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative river elevation tolerance was accepted.");
     } catch (const std::invalid_argument &) {
     }
 }

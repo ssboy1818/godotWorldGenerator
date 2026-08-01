@@ -67,6 +67,12 @@ void WorldgenSettings::_bind_methods() {
                                 &WorldgenSettings::setRiverRandomness);
     godot::ClassDB::bind_method(godot::D_METHOD("get_river_randomness"),
                                 &WorldgenSettings::riverRandomness);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_river_elevation_tolerance", "tolerance"),
+        &WorldgenSettings::setRiverElevationTolerance);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_river_elevation_tolerance"),
+        &WorldgenSettings::riverElevationTolerance);
 
     ADD_GROUP("World", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::RECT2, "bounds"),
@@ -144,6 +150,12 @@ void WorldgenSettings::_bind_methods() {
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1,0.001"),
                  "set_river_randomness", "get_river_randomness");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "river_elevation_tolerance",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,0.25,0.001,or_greater"),
+                 "set_river_elevation_tolerance",
+                 "get_river_elevation_tolerance");
 }
 
 void WorldgenSettings::setBounds(const godot::Rect2 &bounds) {
@@ -264,6 +276,14 @@ void WorldgenSettings::setRiverRandomness(double randomness) {
 
 double WorldgenSettings::riverRandomness() const noexcept {
     return m_riverRandomness;
+}
+
+void WorldgenSettings::setRiverElevationTolerance(double tolerance) {
+    m_riverElevationTolerance = tolerance;
+}
+
+double WorldgenSettings::riverElevationTolerance() const noexcept {
+    return m_riverElevationTolerance;
 }
 
 } // namespace worldgen

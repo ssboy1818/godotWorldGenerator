@@ -16,6 +16,7 @@ func _initialize() -> void:
     assert(settings.river_source_count == 12)
     assert(is_equal_approx(settings.river_minimum_source_elevation, 0.6))
     assert(is_equal_approx(settings.river_randomness, 0.25))
+    assert(is_equal_approx(settings.river_elevation_tolerance, 0.03))
     settings.bounds = Rect2(0.0, 0.0, 512.0, 512.0)
     settings.seed = 93
     settings.columns = 16
@@ -27,6 +28,7 @@ func _initialize() -> void:
     settings.river_source_count = 24
     settings.river_minimum_source_elevation = 0.5
     settings.river_randomness = 0.35
+    settings.river_elevation_tolerance = 0.03
 
     var generator := VoronoiWorldGenerator.new()
     generator.settings = settings
@@ -42,9 +44,16 @@ func _initialize() -> void:
     assert(world.river_offsets.size() == world.river_count + 1)
     assert(world.river_downstream_indices.size() == world.river_count)
     assert(world.river_vertices.size() == world.river_strengths.size())
+    assert(world.cell_edge_rivers.size() == world.vertices.size())
     assert(world.cell_vertex_offsets[-1] == world.vertices.size())
     assert(world.neighbor_offsets[-1] == world.neighbors.size())
     assert(world.river_offsets[-1] == world.river_vertices.size())
+    var river_region_edges := 0
+    for river in world.cell_edge_rivers:
+        assert(river >= -1 and river < world.river_count)
+        if river >= 0:
+            river_region_edges += 1
+    assert(river_region_edges > 0)
     var linked_river_segments := 0
     for river in world.river_count:
         var first_node: int = world.river_offsets[river]
@@ -75,6 +84,7 @@ func _initialize() -> void:
     assert(repeated.river_strengths == world.river_strengths)
     assert(repeated.river_offsets == world.river_offsets)
     assert(repeated.river_downstream_indices == world.river_downstream_indices)
+    assert(repeated.cell_edge_rivers == world.cell_edge_rivers)
 
     var node := VoronoiWorld2D.new()
     node.settings = settings

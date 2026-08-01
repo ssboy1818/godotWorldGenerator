@@ -56,6 +56,12 @@ void validateSettings(const WorldGenerationSettings &settings) {
         || settings.riverRandomness < 0.0 || settings.riverRandomness > 1.0) {
         throw std::invalid_argument("River randomness must be between zero and one.");
     }
+    if (!std::isfinite(settings.riverElevationTolerance)
+        || settings.riverElevationTolerance < 0.0
+        || settings.riverElevationTolerance > 1.0) {
+        throw std::invalid_argument(
+            "River elevation tolerance must be between zero and one.");
+    }
 }
 
 } // namespace
@@ -89,6 +95,8 @@ World WorldGenerator::generate() const {
 
     std::vector<Region> regions;
     regions.reserve(division.cells.size());
+    std::vector<CellId> riverCandidateCells;
+    riverCandidateCells.reserve(division.cells.size());
     for (const auto &cell : division.cells) {
         const auto elevation = noise::fractalNoise(cell.sitePosition,
                                                    m_settings.seed,
@@ -103,16 +111,22 @@ World WorldGenerator::generate() const {
                                        + edgeAmount * m_settings.edgeStrength;
         regions.emplace_back(cell.id,
                              elevation,
-                             effectiveSeaLevel);
+                             effectiveSeaLevel,
+                             cell.vertices.size());
+        if (regions.back().isLand()
+            && elevation >= m_settings.riverMinimumSourceElevation) {
+            riverCandidateCells.push_back(cell.id);
+        }
     }
 
     auto rivers = generateRivers(boundingBox,
                                  division,
                                  regions,
+                                 riverCandidateCells,
                                  m_settings.seed,
                                  m_settings.riverSourceCount,
-                                 m_settings.riverMinimumSourceElevation,
-                                 m_settings.riverRandomness);
+                                 m_settings.riverRandomness,
+                                 m_settings.riverElevationTolerance);
 
     return World{boundingBox,
                  std::move(division),

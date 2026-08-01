@@ -26,10 +26,12 @@ world or provide a complete visualization demo.
    vertices in `Polygon::vertices`.
 5. Sample multi-octave Perlin noise at each site's position.
 6. Raise the effective sea level near the world border using a smooth edge-decay
-   mask and build one classified `Region` per polygon.
-7. Canonicalize shared polygon vertices into a boundary graph, assign one seeded
-   downhill direction per vertex, accumulate flow at confluences, and split the
-   network into linked river segments.
+   mask and build one classified `Region` per polygon. Record high land regions
+   as possible river sources during this pass.
+7. Canonicalize shared polygon vertices into a boundary graph, route reachable
+   candidates toward water with a bounded elevation tolerance, accumulate flow at
+   confluences, split the network into linked river segments, and annotate the
+   corresponding region edge indices.
 8. Return an immutable core `World` containing the bounds, diagram, regions, and
    rivers.
 9. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
@@ -107,7 +109,8 @@ The domain-level orchestration layer.
 - `RiverNode` stores a polygon vertex and accumulated flow strength. `River`
   stores an ordered node vector plus the ID of its shared downstream segment.
 - `World` owns the generated diagram, regions, and rivers.
-- `Region` references a polygon by ID and stores elevation plus land/water type.
+- `Region` references a polygon by ID and stores elevation, land/water type, and
+  one optional river ID per ordered polygon edge.
 
 The dependency direction is intentional:
 
@@ -210,11 +213,13 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
 - bounds or world size;
 - site columns/rows or another site-placement strategy;
 - jitter and all random seeds;
-- sea level, edge-decay ratio/strength, noise parameters, and river controls;
+- sea level, edge-decay ratio/strength, noise parameters, and river source/routing
+  controls;
 - per-cell site position, ordered polygon vertices, elevation, and land/water type;
 - stable cell indices and neighboring cell indices;
 - ordered river vertices, per-node strengths, river offsets, and downstream
   segment indices;
+- per-cell river IDs aligned with ordered polygon edges;
 - clear validation errors suitable for both GDScript and C++ callers.
 
 Use Godot containers at the binding boundary (`PackedVector2Array`, packed numeric

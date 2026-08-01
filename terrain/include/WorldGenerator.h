@@ -27,6 +27,7 @@ struct WorldGenerationSettings {
     std::size_t riverSourceCount{12};
     double riverMinimumSourceElevation{0.6};
     double riverRandomness{0.25};
+    double riverElevationTolerance{0.03};
 };
 
 class WorldGenerator {

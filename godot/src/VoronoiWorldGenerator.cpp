@@ -81,6 +81,7 @@ namespace {
         .riverSourceCount = static_cast<std::size_t>(riverSourceCount),
         .riverMinimumSourceElevation = settings.riverMinimumSourceElevation(),
         .riverRandomness = settings.riverRandomness(),
+        .riverElevationTolerance = settings.riverElevationTolerance(),
     };
 }
 

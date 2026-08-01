@@ -15,10 +15,11 @@ namespace worldgen {
 [[nodiscard]] std::vector<River> generateRivers(
     const BoundingBox &boundingBox,
     const WorldDivision &division,
-    std::span<const Region> regions,
+    std::span<Region> regions,
+    std::span<const CellId> candidateCells,
     std::uint64_t seed,
     std::size_t riverSourceCount,
-    double minimumSourceElevation,
-    double randomness);
+    double randomness,
+    double elevationTolerance);
 
 } // namespace worldgen
