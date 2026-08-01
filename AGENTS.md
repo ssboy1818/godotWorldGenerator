@@ -24,16 +24,18 @@ world or provide a complete visualization demo.
    Voronoi topology in a `DCEL`.
 4. Clip/finalize every cell against the world bounds and store its ordered polygon
    vertices in `Polygon::vertices`.
-5. Sample multi-octave Perlin noise at each site's position. Apply edge decay so
-   elevation approaches zero near the world border.
-6. Build one `Region` per polygon and classify it as land or water according to
-   `WorldGenerationSettings::seaLevel`.
-7. Return an immutable core `World` containing the bounds, diagram, and regions.
-8. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
+5. Sample multi-octave Perlin noise at each site's position.
+6. Raise the effective sea level near the world border using a smooth edge-decay
+   mask and build one classified `Region` per polygon.
+7. Canonicalize shared polygon vertices into a boundary graph and trace seeded
+   rivers downhill from high inland local maxima.
+8. Return an immutable core `World` containing the bounds, diagram, regions, and
+   rivers.
+9. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
 
 The generator is deterministic when its settings are fixed. A single explicit
-`WorldGenerationSettings::seed` controls both jittered site placement and terrain
-noise; generation does not depend on mutable global random state.
+`WorldGenerationSettings::seed` controls jittered site placement, terrain noise,
+and river routing; generation does not depend on mutable global random state.
 
 ## Repository layout and ownership
 
@@ -85,8 +87,8 @@ highly nonuniform site distributions.
 Procedural elevation functions.
 
 - `perlinNoise` evaluates deterministic gradient noise and can normalize it.
-- `noise` combines several octaves (fBm-style) and applies the edge-decay mask.
-- `edgeDecay` creates island-like boundaries by lowering elevation near the box.
+- `fractalNoise` combines several octaves (fBm-style) and normalizes their sum.
+- `edgeDecay` creates a smooth mask used to raise sea level near the box boundary.
 
 Noise functions receive their seed explicitly. Avoid introducing global
 configuration state, especially before adding concurrent generation.
@@ -101,7 +103,9 @@ The domain-level orchestration layer.
   must be supplied explicitly.
 - `WorldGenerator` owns an immutable copy of `WorldGenerationSettings`, validates
   it, invokes site, Voronoi, and noise generation, and assembles a `World`.
-- `World` owns the generated diagram and regions.
+- `RiverNode` stores a polygon vertex and downstream strength; `River` is an
+  ordered vector of those nodes.
+- `World` owns the generated diagram, regions, and rivers.
 - `Region` references a polygon by ID and stores elevation plus land/water type.
 
 The dependency direction is intentional:
@@ -205,9 +209,10 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
 - bounds or world size;
 - site columns/rows or another site-placement strategy;
 - jitter and all random seeds;
-- sea level, edge-decay ratio, and noise parameters;
+- sea level, edge-decay ratio/strength, noise parameters, and river controls;
 - per-cell site position, ordered polygon vertices, elevation, and land/water type;
 - stable cell indices and neighboring cell indices;
+- ordered river vertices, per-node strengths, and river offsets;
 - clear validation errors suitable for both GDScript and C++ callers.
 
 Use Godot containers at the binding boundary (`PackedVector2Array`, packed numeric
@@ -284,8 +289,9 @@ Do not describe the following as completed:
 - comprehensive automated tests and CI;
 - a complete linked DCEL boundary for every clipped polygon;
 - documented handling of duplicate sites and all geometric degeneracies;
-- chunking, streaming, level of detail, erosion, climate, biomes, rivers, roads,
-  settlements, or serialization;
+- chunking, streaming, level of detail, erosion, climate, biomes, full hydrology
+  such as drainage basins and tributary merging, roads, settlements, or
+  serialization;
 - stable performance/memory guarantees for production-sized worlds;
 - a polygon-rendering Godot demo and supported-platform release packages.
 

@@ -1,5 +1,6 @@
 add_library(worldgen_terrain STATIC
     src/JitteredGridSiteGenerator.cpp
+    src/RiverGenerator.cpp
     src/WorldGenerator.cpp
 )
 add_library(worldgen::terrain ALIAS worldgen_terrain)

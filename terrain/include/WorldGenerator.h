@@ -17,11 +17,16 @@ struct WorldGenerationSettings {
 
     double seaLevel{0.45};
     Vector2d edgeDecayRatio{0.15, 0.15};
+    double edgeStrength{0.55};
 
     std::uint32_t noiseOctaves{5};
     double noiseFrequency{0.01};
     double noiseLacunarity{2.0};
     double noisePersistence{0.5};
+
+    std::size_t riverCount{12};
+    double riverMinimumSourceElevation{0.6};
+    double riverRandomness{0.25};
 };
 
 class WorldGenerator {

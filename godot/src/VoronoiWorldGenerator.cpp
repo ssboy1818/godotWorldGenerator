@@ -44,6 +44,13 @@ namespace {
         throw std::invalid_argument("Noise octaves must fit in a positive 32-bit integer.");
     }
 
+    const auto riverCount = settings.riverCount();
+    if (riverCount < 0
+        || static_cast<std::uint64_t>(riverCount)
+               > std::numeric_limits<std::size_t>::max()) {
+        throw std::invalid_argument("River count exceeds the native size range.");
+    }
+
     const auto bounds = settings.bounds();
     const Vector2d minimum{
         static_cast<double>(bounds.position.x),
@@ -66,10 +73,14 @@ namespace {
             static_cast<double>(edgeDecayRatio.x),
             static_cast<double>(edgeDecayRatio.y),
         },
+        .edgeStrength = settings.edgeStrength(),
         .noiseOctaves = static_cast<std::uint32_t>(noiseOctaves),
         .noiseFrequency = settings.noiseFrequency(),
         .noiseLacunarity = settings.noiseLacunarity(),
         .noisePersistence = settings.noisePersistence(),
+        .riverCount = static_cast<std::size_t>(riverCount),
+        .riverMinimumSourceElevation = settings.riverMinimumSourceElevation(),
+        .riverRandomness = settings.riverRandomness(),
     };
 }
 

@@ -33,6 +33,10 @@ public:
     [[nodiscard]] godot::PackedInt32Array neighborOffsets() const;
     [[nodiscard]] godot::PackedFloat64Array elevations() const;
     [[nodiscard]] godot::PackedInt32Array regionTypes() const;
+    [[nodiscard]] std::int64_t riverCount() const noexcept;
+    [[nodiscard]] godot::PackedVector2Array riverVertices() const;
+    [[nodiscard]] godot::PackedFloat64Array riverStrengths() const;
+    [[nodiscard]] godot::PackedInt32Array riverOffsets() const;
 
 protected:
     static void _bind_methods();
@@ -46,6 +50,9 @@ private:
     godot::PackedInt32Array m_neighborOffsets;
     godot::PackedFloat64Array m_elevations;
     godot::PackedInt32Array m_regionTypes;
+    godot::PackedVector2Array m_riverVertices;
+    godot::PackedFloat64Array m_riverStrengths;
+    godot::PackedInt32Array m_riverOffsets;
 
     void populate(const World &world);
 

@@ -33,6 +33,10 @@ void WorldgenSettings::_bind_methods() {
                                 &WorldgenSettings::setEdgeDecayRatio);
     godot::ClassDB::bind_method(godot::D_METHOD("get_edge_decay_ratio"),
                                 &WorldgenSettings::edgeDecayRatio);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_edge_strength", "strength"),
+                                &WorldgenSettings::setEdgeStrength);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_edge_strength"),
+                                &WorldgenSettings::edgeStrength);
     godot::ClassDB::bind_method(godot::D_METHOD("set_noise_octaves", "octaves"),
                                 &WorldgenSettings::setNoiseOctaves);
     godot::ClassDB::bind_method(godot::D_METHOD("get_noise_octaves"),
@@ -49,6 +53,20 @@ void WorldgenSettings::_bind_methods() {
                                 &WorldgenSettings::setNoisePersistence);
     godot::ClassDB::bind_method(godot::D_METHOD("get_noise_persistence"),
                                 &WorldgenSettings::noisePersistence);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_river_count", "count"),
+                                &WorldgenSettings::setRiverCount);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_count"),
+                                &WorldgenSettings::riverCount);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_river_minimum_source_elevation", "elevation"),
+        &WorldgenSettings::setRiverMinimumSourceElevation);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_river_minimum_source_elevation"),
+        &WorldgenSettings::riverMinimumSourceElevation);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_river_randomness", "randomness"),
+                                &WorldgenSettings::setRiverRandomness);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_randomness"),
+                                &WorldgenSettings::riverRandomness);
 
     ADD_GROUP("World", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::RECT2, "bounds"),
@@ -81,6 +99,11 @@ void WorldgenSettings::_bind_methods() {
                  "set_sea_level", "get_sea_level");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::VECTOR2, "edge_decay_ratio"),
                  "set_edge_decay_ratio", "get_edge_decay_ratio");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "edge_strength",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.001"),
+                 "set_edge_strength", "get_edge_strength");
 
     ADD_GROUP("Noise", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
@@ -103,6 +126,24 @@ void WorldgenSettings::_bind_methods() {
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1,0.001,or_greater"),
                  "set_noise_persistence", "get_noise_persistence");
+
+    ADD_GROUP("Rivers", "");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "river_count",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1024,1,or_greater"),
+                 "set_river_count", "get_river_count");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "river_minimum_source_elevation",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.001"),
+                 "set_river_minimum_source_elevation",
+                 "get_river_minimum_source_elevation");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "river_randomness",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.001"),
+                 "set_river_randomness", "get_river_randomness");
 }
 
 void WorldgenSettings::setBounds(const godot::Rect2 &bounds) {
@@ -161,6 +202,14 @@ godot::Vector2 WorldgenSettings::edgeDecayRatio() const {
     return m_edgeDecayRatio;
 }
 
+void WorldgenSettings::setEdgeStrength(double strength) {
+    m_edgeStrength = strength;
+}
+
+double WorldgenSettings::edgeStrength() const noexcept {
+    return m_edgeStrength;
+}
+
 void WorldgenSettings::setNoiseOctaves(std::int64_t octaves) {
     m_noiseOctaves = octaves;
 }
@@ -191,6 +240,30 @@ void WorldgenSettings::setNoisePersistence(double persistence) {
 
 double WorldgenSettings::noisePersistence() const noexcept {
     return m_noisePersistence;
+}
+
+void WorldgenSettings::setRiverCount(std::int64_t count) {
+    m_riverCount = count;
+}
+
+std::int64_t WorldgenSettings::riverCount() const noexcept {
+    return m_riverCount;
+}
+
+void WorldgenSettings::setRiverMinimumSourceElevation(double elevation) {
+    m_riverMinimumSourceElevation = elevation;
+}
+
+double WorldgenSettings::riverMinimumSourceElevation() const noexcept {
+    return m_riverMinimumSourceElevation;
+}
+
+void WorldgenSettings::setRiverRandomness(double randomness) {
+    m_riverRandomness = randomness;
+}
+
+double WorldgenSettings::riverRandomness() const noexcept {
+    return m_riverRandomness;
 }
 
 } // namespace worldgen

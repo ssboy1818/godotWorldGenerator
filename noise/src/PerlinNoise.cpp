@@ -50,6 +50,10 @@ constexpr double lerp(double from, double to, double amount) noexcept {
     return from + amount * (to - from);
 }
 
+constexpr double smoothstep(double value) noexcept {
+    return value * value * (3.0 - 2.0 * value);
+}
+
 double gradientDot(std::int64_t x,
                    std::int64_t y,
                    double offsetX,
@@ -108,17 +112,15 @@ double edgeDecay(const BoundingBox &worldBounds,
     const auto distanceY = std::min(pos.y - worldBounds.min.y, worldBounds.max.y - pos.y);
     const auto xMask = std::clamp(1.0 - distanceX / decayRadius.x, 0.0, 1.0);
     const auto yMask = std::clamp(1.0 - distanceY / decayRadius.y, 0.0, 1.0);
-    return std::max(xMask, yMask);
+    return smoothstep(std::max(xMask, yMask));
 }
 
-double noise(const BoundingBox &worldBounds,
-             Vector2d pos,
-             Vector2d decayRadius,
-             std::uint64_t seed,
-             std::uint32_t octaves,
-             double baseFrequency,
-             double frequencyCoefficient,
-             double strengthCoefficient) noexcept {
+double fractalNoise(Vector2d pos,
+                    std::uint64_t seed,
+                    std::uint32_t octaves,
+                    double baseFrequency,
+                    double frequencyCoefficient,
+                    double strengthCoefficient) noexcept {
     if (octaves == 0
         || !std::isfinite(baseFrequency) || baseFrequency <= 0.0
         || !std::isfinite(frequencyCoefficient) || frequencyCoefficient <= 0.0
@@ -141,9 +143,7 @@ double noise(const BoundingBox &worldBounds,
         strength *= strengthCoefficient;
     }
 
-    return std::lerp(value / totalStrength,
-                     0.0,
-                     edgeDecay(worldBounds, decayRadius, pos));
+    return value / totalStrength;
 }
 
 } // namespace noise

@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -62,6 +63,14 @@ void VoronoiWorldData::_bind_methods() {
                                 &VoronoiWorldData::elevations);
     godot::ClassDB::bind_method(godot::D_METHOD("get_region_types"),
                                 &VoronoiWorldData::regionTypes);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_count"),
+                                &VoronoiWorldData::riverCount);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_vertices"),
+                                &VoronoiWorldData::riverVertices);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_strengths"),
+                                &VoronoiWorldData::riverStrengths);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_offsets"),
+                                &VoronoiWorldData::riverOffsets);
 
     BIND_CONSTANT(REGION_TYPE_WATER);
     BIND_CONSTANT(REGION_TYPE_LAND);
@@ -122,6 +131,30 @@ void VoronoiWorldData::_bind_methods() {
                                      "",
                                      readOnly),
                  "", "get_region_types");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "river_count",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_river_count");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_VECTOR2_ARRAY,
+                                     "river_vertices",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_river_vertices");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_FLOAT64_ARRAY,
+                                     "river_strengths",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_river_strengths");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "river_offsets",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_river_offsets");
 }
 
 std::int64_t VoronoiWorldData::cellCount() const noexcept {
@@ -158,6 +191,22 @@ godot::PackedFloat64Array VoronoiWorldData::elevations() const {
 
 godot::PackedInt32Array VoronoiWorldData::regionTypes() const {
     return m_regionTypes;
+}
+
+std::int64_t VoronoiWorldData::riverCount() const noexcept {
+    return m_riverOffsets.size() == 0 ? 0 : m_riverOffsets.size() - 1;
+}
+
+godot::PackedVector2Array VoronoiWorldData::riverVertices() const {
+    return m_riverVertices;
+}
+
+godot::PackedFloat64Array VoronoiWorldData::riverStrengths() const {
+    return m_riverStrengths;
+}
+
+godot::PackedInt32Array VoronoiWorldData::riverOffsets() const {
+    return m_riverOffsets;
 }
 
 void VoronoiWorldData::populate(const World &world) {
@@ -239,6 +288,47 @@ void VoronoiWorldData::populate(const World &world) {
         regionTypes[cell] = region.isWater() ? REGION_TYPE_WATER : REGION_TYPE_LAND;
         populated[cell] = true;
     }
+
+    const auto &rivers = world.rivers();
+    if (rivers.size() >= maximum)
+        throw std::length_error("The generated world has too many rivers for packed offsets.");
+
+    std::size_t riverNodeCount = 0;
+    for (const auto &river : rivers) {
+        if (river.size() < 2)
+            throw std::logic_error("A generated river must have at least two nodes.");
+        addPackedCount(riverNodeCount,
+                       river.size(),
+                       "The generated world has too many river nodes for packed offsets.");
+    }
+
+    resizePacked(m_riverVertices,
+                 riverNodeCount,
+                 "Unable to allocate the packed river vertex array.");
+    resizePacked(m_riverStrengths,
+                 riverNodeCount,
+                 "Unable to allocate the packed river strength array.");
+    resizePacked(m_riverOffsets,
+                 rivers.size() + 1,
+                 "Unable to allocate the river offsets.");
+
+    auto *riverVertices = m_riverVertices.ptrw();
+    auto *riverStrengths = m_riverStrengths.ptrw();
+    auto *riverOffsets = m_riverOffsets.ptrw();
+    std::size_t riverNodeOffset = 0;
+    for (std::size_t riverIndex = 0; riverIndex < rivers.size(); ++riverIndex) {
+        riverOffsets[riverIndex] = static_cast<std::int32_t>(riverNodeOffset);
+        for (const auto &node : rivers[riverIndex]) {
+            if (!boundingBox.contains(node.vertex)
+                || !std::isfinite(node.strength) || node.strength <= 0.0) {
+                throw std::logic_error("A generated river contains an invalid node.");
+            }
+            riverVertices[riverNodeOffset] = toGodotVector(node.vertex);
+            riverStrengths[riverNodeOffset] = node.strength;
+            ++riverNodeOffset;
+        }
+    }
+    riverOffsets[rivers.size()] = static_cast<std::int32_t>(riverNodeOffset);
 }
 
 } // namespace worldgen

@@ -35,6 +35,9 @@ public:
     void setEdgeDecayRatio(const godot::Vector2 &ratio);
     [[nodiscard]] godot::Vector2 edgeDecayRatio() const;
 
+    void setEdgeStrength(double strength);
+    [[nodiscard]] double edgeStrength() const noexcept;
+
     void setNoiseOctaves(std::int64_t octaves);
     [[nodiscard]] std::int64_t noiseOctaves() const noexcept;
 
@@ -47,6 +50,15 @@ public:
     void setNoisePersistence(double persistence);
     [[nodiscard]] double noisePersistence() const noexcept;
 
+    void setRiverCount(std::int64_t count);
+    [[nodiscard]] std::int64_t riverCount() const noexcept;
+
+    void setRiverMinimumSourceElevation(double elevation);
+    [[nodiscard]] double riverMinimumSourceElevation() const noexcept;
+
+    void setRiverRandomness(double randomness);
+    [[nodiscard]] double riverRandomness() const noexcept;
+
 protected:
     static void _bind_methods();
 
@@ -58,10 +70,14 @@ private:
     double m_jitter{0.8};
     double m_seaLevel{0.45};
     godot::Vector2 m_edgeDecayRatio{0.15, 0.15};
+    double m_edgeStrength{0.55};
     std::int64_t m_noiseOctaves{5};
     double m_noiseFrequency{0.01};
     double m_noiseLacunarity{2.0};
     double m_noisePersistence{0.5};
+    std::int64_t m_riverCount{12};
+    double m_riverMinimumSourceElevation{0.6};
+    double m_riverRandomness{0.25};
 };
 
 } // namespace worldgen

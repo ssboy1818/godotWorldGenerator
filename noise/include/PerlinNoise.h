@@ -16,14 +16,12 @@ namespace noise {
                                Vector2d decayRadius,
                                Vector2d pos) noexcept;
 
-[[nodiscard]] double noise(const BoundingBox &worldBounds,
-                           Vector2d pos,
-                           Vector2d decayRadius,
-                           std::uint64_t seed,
-                           std::uint32_t octaves = 4,
-                           double baseFrequency = 0.01,
-                           double frequencyCoefficient = 2.0,
-                           double strengthCoefficient = 0.5) noexcept;
+[[nodiscard]] double fractalNoise(Vector2d pos,
+                                  std::uint64_t seed,
+                                  std::uint32_t octaves = 4,
+                                  double baseFrequency = 0.01,
+                                  double frequencyCoefficient = 2.0,
+                                  double strengthCoefficient = 0.5) noexcept;
 
 } // namespace noise
 } // namespace worldgen

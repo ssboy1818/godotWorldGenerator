@@ -18,6 +18,11 @@ add_subdirectory(voronoi)
 add_subdirectory(noise)
 add_subdirectory(terrain)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
+
 if(NOT DEFINED GODOTCPP_BUILD_PROFILE)
     set(GODOTCPP_BUILD_PROFILE
         "${CMAKE_CURRENT_SOURCE_DIR}/godot/build_profile.json"

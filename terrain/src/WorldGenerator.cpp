@@ -3,6 +3,7 @@
 #include "Fortune.h"
 #include "JitteredGridSiteGenerator.h"
 #include "PerlinNoise.h"
+#include "RiverGenerator.h"
 
 #include <cmath>
 #include <limits>
@@ -33,6 +34,10 @@ void validateSettings(const WorldGenerationSettings &settings) {
         || settings.edgeDecayRatio.y <= 0.0) {
         throw std::invalid_argument("Edge decay ratios must be positive.");
     }
+    if (!std::isfinite(settings.edgeStrength)
+        || settings.edgeStrength < 0.0 || settings.edgeStrength > 1.0) {
+        throw std::invalid_argument("Edge strength must be between zero and one.");
+    }
     if (settings.noiseOctaves == 0)
         throw std::invalid_argument("Noise must have at least one octave.");
     if (!std::isfinite(settings.noiseFrequency) || settings.noiseFrequency <= 0.0)
@@ -41,6 +46,16 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument("Noise lacunarity must be positive.");
     if (!std::isfinite(settings.noisePersistence) || settings.noisePersistence < 0.0)
         throw std::invalid_argument("Noise persistence must be non-negative.");
+    if (!std::isfinite(settings.riverMinimumSourceElevation)
+        || settings.riverMinimumSourceElevation < 0.0
+        || settings.riverMinimumSourceElevation > 1.0) {
+        throw std::invalid_argument(
+            "Minimum river source elevation must be between zero and one.");
+    }
+    if (!std::isfinite(settings.riverRandomness)
+        || settings.riverRandomness < 0.0 || settings.riverRandomness > 1.0) {
+        throw std::invalid_argument("River randomness must be between zero and one.");
+    }
 }
 
 } // namespace
@@ -75,18 +90,34 @@ World WorldGenerator::generate() const {
     std::vector<Region> regions;
     regions.reserve(division.cells.size());
     for (const auto &cell : division.cells) {
-        const auto elevation = noise::noise(boundingBox, cell.sitePosition, decayRadius,
-                                            m_settings.seed,
-                                            m_settings.noiseOctaves,
-                                            m_settings.noiseFrequency,
-                                            m_settings.noiseLacunarity,
-                                            m_settings.noisePersistence);
+        const auto elevation = noise::fractalNoise(cell.sitePosition,
+                                                   m_settings.seed,
+                                                   m_settings.noiseOctaves,
+                                                   m_settings.noiseFrequency,
+                                                   m_settings.noiseLacunarity,
+                                                   m_settings.noisePersistence);
+        const auto edgeAmount = noise::edgeDecay(boundingBox,
+                                                 decayRadius,
+                                                 cell.sitePosition);
+        const auto effectiveSeaLevel = m_settings.seaLevel
+                                       + edgeAmount * m_settings.edgeStrength;
         regions.emplace_back(cell.id,
                              elevation,
-                             m_settings.seaLevel);
+                             effectiveSeaLevel);
     }
 
-    return World{boundingBox, std::move(division), std::move(regions)};
+    auto rivers = generateRivers(boundingBox,
+                                 division,
+                                 regions,
+                                 m_settings.seed,
+                                 m_settings.riverCount,
+                                 m_settings.riverMinimumSourceElevation,
+                                 m_settings.riverRandomness);
+
+    return World{boundingBox,
+                 std::move(division),
+                 std::move(regions),
+                 std::move(rivers)};
 }
 
 } // namespace worldgen

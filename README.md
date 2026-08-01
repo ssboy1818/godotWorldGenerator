@@ -2,7 +2,8 @@
 
 Worldgen is a Godot 4.4 GDExtension backed by an engine-independent C++23 core.
 It synchronously generates a bounded Voronoi world with deterministic terrain
-elevation, land/water classification, and cell adjacency.
+elevation, land/water classification, cell adjacency, and rivers that follow
+Voronoi borders downhill from high inland vertices.
 
 ## Build
 
@@ -68,6 +69,9 @@ settings.bounds = Rect2(0, 0, 2048, 2048)
 settings.seed = 42
 settings.columns = 64
 settings.rows = 64
+settings.river_count = 12
+settings.river_minimum_source_elevation = 0.6
+settings.river_randomness = 0.25
 generator.settings = settings
 
 var world: VoronoiWorldData = generator.generate()
@@ -89,3 +93,7 @@ for cell in world.cell_count:
 cell `i` uses the half-open ranges `[offsets[i], offsets[i + 1])` in the shared
 `vertices` and `neighbors` arrays. Region type constants are available as
 `VoronoiWorldData.REGION_TYPE_WATER` and `VoronoiWorldData.REGION_TYPE_LAND`.
+
+River `i` occupies `[river_offsets[i], river_offsets[i + 1])` in the flattened
+`river_vertices` and `river_strengths` arrays. Strength starts at `1.0` and grows
+downstream, allowing a renderer to vary river width per node.
