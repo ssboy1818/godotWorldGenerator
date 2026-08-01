@@ -108,8 +108,9 @@ for cell in world.cell_count:
 `sites`, `elevations`, `region_land_indices`, and `region_types` contain one
 entry per cell. Water regions have `-1` in `region_land_indices`. Land region
 `i` uses that value as an index into the compact `land_region_ids`,
-`land_temperatures`, `land_humidities`, and `land_vegetations` arrays;
-`land_region_ids` provides the inverse mapping back to the region/cell ID.
+`land_temperatures`, `land_humidities`, `land_vegetations`, and `land_types`
+arrays; `land_region_ids` provides the inverse mapping back to the region/cell
+ID.
 `cell_vertex_offsets` and `neighbor_offsets` contain `cell_count + 1` entries, so
 cell `i` uses the half-open ranges `[offsets[i], offsets[i + 1])` in the shared
 `vertices` and `neighbors` arrays. Region type constants are available as
@@ -129,6 +130,27 @@ river_humidity_coefficient` and `river strength *
 river_vegetation_coefficient`, respectively, and are also clamped to `[0, 1]`.
 Both river climate coefficients are in `[0, 1]`; setting either one to zero
 disables that contribution.
+
+Each land region is classified after river climate contributions are applied.
+Elevation is normalized from the region's effective sea level to the maximum
+terrain elevation. Classification uses the following priority order:
+
+| Land type | Rule |
+| --- | --- |
+| `LAND_TYPE_SNOW_PEAKS` | normalized elevation at least `0.70` and temperature at most `0` |
+| `LAND_TYPE_MOUNTAIN` | normalized elevation at least `0.70` |
+| `LAND_TYPE_TUNDRA` | temperature at most `5` |
+| `LAND_TYPE_HILLS` | normalized elevation at least `0.40` |
+| `LAND_TYPE_SWAMP` | normalized elevation at most `0.12`, humidity at least `0.70`, and vegetation at least `0.50` |
+| `LAND_TYPE_BEACH` | normalized elevation at most `0.06` |
+| `LAND_TYPE_RAINFOREST` | temperature at least `20`, humidity at least `0.70`, and vegetation at least `0.70` |
+| `LAND_TYPE_DESERT` | temperature at least `20`, humidity at most `0.25`, and vegetation at most `0.30` |
+| `LAND_TYPE_FOREST` | humidity at least `0.40` and vegetation at least `0.55` |
+| `LAND_TYPE_SPARSE` | humidity at most `0.30` or vegetation at most `0.30` |
+| `LAND_TYPE_FIELDS` | all remaining land |
+
+`land_types` is aligned with the other compact land-only arrays. Water regions
+do not have a land type and retain `-1` in `region_land_indices`.
 
 River `i` occupies `[river_offsets[i], river_offsets[i + 1])` in the flattened
 `river_vertices` and `river_strengths` arrays. Each source contributes unit flow;

@@ -71,6 +71,8 @@ void VoronoiWorldData::_bind_methods() {
                                 &VoronoiWorldData::landHumidities);
     godot::ClassDB::bind_method(godot::D_METHOD("get_land_vegetations"),
                                 &VoronoiWorldData::landVegetations);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_land_types"),
+                                &VoronoiWorldData::landTypes);
     godot::ClassDB::bind_method(godot::D_METHOD("get_region_types"),
                                 &VoronoiWorldData::regionTypes);
     godot::ClassDB::bind_method(godot::D_METHOD("get_river_count"),
@@ -100,6 +102,17 @@ void VoronoiWorldData::_bind_methods() {
 
     BIND_CONSTANT(REGION_TYPE_WATER);
     BIND_CONSTANT(REGION_TYPE_LAND);
+    BIND_CONSTANT(LAND_TYPE_MOUNTAIN);
+    BIND_CONSTANT(LAND_TYPE_SNOW_PEAKS);
+    BIND_CONSTANT(LAND_TYPE_HILLS);
+    BIND_CONSTANT(LAND_TYPE_FIELDS);
+    BIND_CONSTANT(LAND_TYPE_FOREST);
+    BIND_CONSTANT(LAND_TYPE_SPARSE);
+    BIND_CONSTANT(LAND_TYPE_DESERT);
+    BIND_CONSTANT(LAND_TYPE_BEACH);
+    BIND_CONSTANT(LAND_TYPE_SWAMP);
+    BIND_CONSTANT(LAND_TYPE_RAINFOREST);
+    BIND_CONSTANT(LAND_TYPE_TUNDRA);
 
     constexpr auto readOnly = godot::PROPERTY_USAGE_DEFAULT
                               | godot::PROPERTY_USAGE_READ_ONLY;
@@ -181,6 +194,12 @@ void VoronoiWorldData::_bind_methods() {
                                      "",
                                      readOnly),
                  "", "get_land_vegetations");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "land_types",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_land_types");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
                                      "region_types",
                                      godot::PROPERTY_HINT_NONE,
@@ -311,6 +330,10 @@ godot::PackedFloat64Array VoronoiWorldData::landHumidities() const {
 
 godot::PackedFloat64Array VoronoiWorldData::landVegetations() const {
     return m_landVegetations;
+}
+
+godot::PackedInt32Array VoronoiWorldData::landTypes() const {
+    return m_landTypes;
 }
 
 godot::PackedInt32Array VoronoiWorldData::regionTypes() const {
@@ -454,6 +477,9 @@ void VoronoiWorldData::populate(const World &world) {
     resizePacked(m_landVegetations,
                  landClimates.size(),
                  "Unable to allocate the land vegetation array.");
+    resizePacked(m_landTypes,
+                 landClimates.size(),
+                 "Unable to allocate the land type array.");
     const auto &rivers = world.rivers();
     if (rivers.size() >= maximum)
         throw std::length_error("The generated world has too many rivers for packed offsets.");
@@ -464,6 +490,7 @@ void VoronoiWorldData::populate(const World &world) {
     auto *landTemperatures = m_landTemperatures.ptrw();
     auto *landHumidities = m_landHumidities.ptrw();
     auto *landVegetations = m_landVegetations.ptrw();
+    auto *landTypes = m_landTypes.ptrw();
     auto *regionTypes = m_regionTypes.ptrw();
     auto *cellEdgeRivers = m_cellEdgeRivers.ptrw();
     std::vector<bool> populated(cells.size(), false);
@@ -478,9 +505,9 @@ void VoronoiWorldData::populate(const World &world) {
         elevations[cell] = region.elevation();
         regionTypes[cell] = region.isWater() ? REGION_TYPE_WATER : REGION_TYPE_LAND;
         if (region.isWater()) {
-            if (region.hasLandClimate()) {
+            if (region.hasLandClimate() || region.hasLandType()) {
                 throw std::logic_error(
-                    "A generated water region references a land climate.");
+                    "A generated water region has land-only data.");
             }
         } else {
             const auto landClimate = static_cast<std::size_t>(
@@ -505,6 +532,12 @@ void VoronoiWorldData::populate(const World &world) {
             landTemperatures[landClimate] = climate.temperature;
             landHumidities[landClimate] = climate.humidity;
             landVegetations[landClimate] = climate.vegetation;
+            if (!region.hasLandType()) {
+                throw std::logic_error(
+                    "A generated land region does not have a land type.");
+            }
+            landTypes[landClimate] = static_cast<std::int32_t>(
+                region.landType());
             populatedLandClimates[landClimate] = true;
         }
         if (region.edgeRivers().size() != cells[cell].vertices.size()) {

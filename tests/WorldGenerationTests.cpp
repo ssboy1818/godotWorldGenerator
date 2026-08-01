@@ -1,5 +1,6 @@
 #include "ClimateGenerator.h"
 #include "Id.h"
+#include "LandType.h"
 #include "PerlinNoise.h"
 #include "ProvinceGenerator.h"
 #include "WorldGenerator.h"
@@ -579,12 +580,16 @@ void testRegionClimate() {
             require(!region.hasLandClimate()
                         && region.landClimateId() == INVALID_LAND_CLIMATE_ID,
                     "A water region references a land climate sample.");
+            require(!region.hasLandType(),
+                    "A water region has a land type.");
             ++waterRegionCount;
             continue;
         }
 
         require(region.hasLandClimate(),
                 "A land region does not reference a climate sample.");
+        require(region.hasLandType(),
+                "A land region does not have a land type.");
         require(region.landClimateId() == expectedLandClimate,
                 "Land climate IDs are not compact and ordered by region ID.");
         const auto &cell = world.division().cells.at(region.cell());
@@ -605,6 +610,13 @@ void testRegionClimate() {
                     && actual.humidity == repeatedClimate.humidity
                     && actual.vegetation == repeatedClimate.vegetation,
                 "Land climate values are not deterministic.");
+        require(region.landType()
+                    == classifyLandType(region.elevation(),
+                                        region.seaLevel(),
+                                        actual),
+                "A region stores an incorrect land type.");
+        require(region.landType() == repeatedRegion.landType(),
+                "Land types are not deterministic.");
         ++expectedLandClimate;
     }
     require(expectedLandClimate == world.landClimates().size(),
@@ -1276,6 +1288,12 @@ void testRivers() {
                     && actual.humidity == repeatedClimate.humidity
                     && actual.vegetation == repeatedClimate.vegetation,
                 "River climate influence is not deterministic.");
+        require(region.hasLandType()
+                    && region.landType()
+                           == classifyLandType(region.elevation(),
+                                               region.seaLevel(),
+                                               actual),
+                "Land type does not use the river-adjusted climate.");
         if (strongestRiver > 0.0)
             ++riverClimateRegionCount;
         else

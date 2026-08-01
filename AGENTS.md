@@ -36,7 +36,9 @@ world or provide a complete visualization demo.
    candidates toward water with a bounded elevation tolerance, accumulate flow at
    confluences, split the network into linked river segments, and annotate the
    corresponding region edge indices. Increase humidity and vegetation in land
-   regions adjoining rivers according to the strongest local segment's flow.
+   regions adjoining rivers according to the strongest local segment's flow,
+   then classify every land region from its final climate and normalized height
+   above its effective sea level.
 9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
    river, normalized seed-distance, short shared-border, and base claim costs.
    Remove undersized provinces through deterministic neighbor-based region
@@ -132,13 +134,16 @@ The domain-level orchestration layer.
 - `WorldGenerator` owns an immutable copy of `WorldGenerationSettings`, validates
   it, invokes site, Voronoi, noise, climate, river, and province generation, and
   assembles a `World`.
+- `LandType` classifies land as mountain, snow peaks, hills, fields, forest,
+  sparse, desert, beach, swamp, rainforest, or tundra from its final climate and
+  normalized elevation above the effective sea level.
 - `RiverNode` stores a polygon vertex and accumulated flow strength. `River`
   stores an ordered node vector plus the ID of its shared downstream segment.
 - `World` owns the generated diagram, regions, rivers, and provinces.
 - `Region` references a polygon by ID and stores elevation, land/water type, a
-  land-only climate ID, an optional land-only province ID, and one optional river
-  ID per ordered polygon edge. `World` stores climate samples densely for land
-  regions only.
+  land-only climate ID and land type, an optional land-only province ID, and one
+  optional river ID per ordered polygon edge. `World` stores climate samples
+  densely for land regions only.
 - `Province` stores an ordered union of region IDs, its seed, and remaining claim
   score.
 

@@ -1,11 +1,13 @@
 #pragma once
 
+#include "LandType.h"
 #include "River.h"
 #include "WorldDivision.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -33,6 +35,7 @@ public:
            LandClimateId landClimateId)
         : m_cell(cell),
           m_elevation(elevation),
+          m_seaLevel(seaLevel),
           m_type(elevation < seaLevel ? RegionType::Water : RegionType::Land),
           m_landClimateId(landClimateId),
           m_edgeRivers(edgeCount, INVALID_RIVER_ID) {
@@ -54,6 +57,10 @@ public:
         return m_elevation;
     }
 
+    [[nodiscard]] double seaLevel() const noexcept {
+        return m_seaLevel;
+    }
+
     [[nodiscard]] RegionType type() const noexcept {
         return m_type;
     }
@@ -72,6 +79,28 @@ public:
 
     [[nodiscard]] bool hasLandClimate() const noexcept {
         return m_landClimateId != INVALID_LAND_CLIMATE_ID;
+    }
+
+    [[nodiscard]] LandType landType() const {
+        if (!m_landType.has_value())
+            throw std::logic_error("A region does not have a land type.");
+        return *m_landType;
+    }
+
+    [[nodiscard]] bool hasLandType() const noexcept {
+        return m_landType.has_value();
+    }
+
+    void setLandType(LandType landType) {
+        if (!isLand())
+            throw std::logic_error("A water region cannot have a land type.");
+        if (!isValidLandType(landType))
+            throw std::invalid_argument("A region needs a valid land type.");
+        if (m_landType.has_value() && *m_landType != landType) {
+            throw std::logic_error(
+                "A land region cannot have two land types.");
+        }
+        m_landType = landType;
     }
 
     [[nodiscard]] ProvinceId provinceId() const noexcept {
@@ -133,8 +162,10 @@ public:
 private:
     CellId m_cell;
     double m_elevation;
+    double m_seaLevel;
     RegionType m_type;
     LandClimateId m_landClimateId;
+    std::optional<LandType> m_landType;
     ProvinceId m_provinceId{INVALID_PROVINCE_ID};
     std::vector<RiverId> m_edgeRivers;
 };

@@ -3,6 +3,7 @@
 #include "ClimateGenerator.h"
 #include "Fortune.h"
 #include "JitteredGridSiteGenerator.h"
+#include "LandType.h"
 #include "PerlinNoise.h"
 #include "ProvinceGenerator.h"
 #include "RiverGenerator.h"
@@ -187,6 +188,22 @@ void applyRiverClimateInfluence(
     }
 }
 
+void classifyLandRegions(std::span<Region> regions,
+                         std::span<const climate::ClimateSample> landClimates) {
+    for (auto &region : regions) {
+        if (!region.isLand())
+            continue;
+        if (region.landClimateId() >= landClimates.size()) {
+            throw std::logic_error(
+                "A land region references an invalid climate sample.");
+        }
+        region.setLandType(classifyLandType(
+            region.elevation(),
+            region.seaLevel(),
+            landClimates[region.landClimateId()]));
+    }
+}
+
 } // namespace
 
 WorldGenerator::WorldGenerator(WorldGenerationSettings settings)
@@ -279,6 +296,7 @@ World WorldGenerator::generate() const {
                                rivers,
                                m_settings.riverHumidityCoefficient,
                                m_settings.riverVegetationCoefficient);
+    classifyLandRegions(regions, landClimates);
 
     auto provinces = generateProvinces(
         boundingBox,
