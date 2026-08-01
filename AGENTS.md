@@ -36,9 +36,10 @@ world or provide a complete visualization demo.
    candidates toward water with a bounded elevation tolerance, accumulate flow at
    confluences, split the network into linked river segments, and annotate the
    corresponding region edge indices. Increase humidity and vegetation in land
-   regions adjoining rivers according to the strongest local segment's flow,
-   then classify every land region from its final climate and normalized height
-   above its effective sea level.
+   regions adjoining rivers according to the strongest local segment's flow.
+   Identify boundary-connected ocean cells, add distance-decayed ocean humidity
+   to land, then classify every land region from compound final-climate and
+   normalized-elevation conditions.
 9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
    river, normalized seed-distance, short shared-border, and base claim costs.
    Remove undersized provinces through deterministic neighbor-based region
@@ -135,8 +136,9 @@ The domain-level orchestration layer.
   it, invokes site, Voronoi, noise, climate, river, and province generation, and
   assembles a `World`.
 - `LandType` classifies land as mountain, snow peaks, hills, fields, forest,
-  sparse, desert, beach, swamp, rainforest, or tundra from its final climate and
-  normalized elevation above the effective sea level.
+  sparse, desert, swamp, rainforest, or tundra from configurable compound
+  conditions over its final climate and normalized elevation above the effective
+  sea level.
 - `RiverNode` stores a polygon vertex and accumulated flow strength. `River`
   stores an ordered node vector plus the ID of its shared downstream segment.
 - `World` owns the generated diagram, regions, rivers, and provinces.
@@ -248,10 +250,12 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
 - bounds or world size;
 - site columns/rows or another site-placement strategy;
 - jitter and all random seeds;
-- sea level, edge-decay ratio/strength, noise parameters, climate coefficients and
-  temperatures, and river source/routing controls;
+- sea level, edge-decay ratio/strength, noise parameters, climate coefficients,
+  ocean humidity distance/strength, temperatures, compound land-type condition
+  thresholds, and river source/routing controls;
 - per-cell site position, ordered polygon vertices, elevation, land/water type,
-  and mappings to compact land-only temperature, humidity, and vegetation arrays;
+  and mappings to compact land-only temperature, humidity, vegetation, and land
+  type arrays;
 - stable cell indices and neighboring cell indices;
 - ordered river vertices, per-node strengths, river offsets, and downstream
   segment indices;

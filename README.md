@@ -76,6 +76,18 @@ settings.equator_temperature = 30.0
 settings.pole_temperature = -20.0
 settings.vegetation_coefficient = 1.0
 settings.humidity_coefficient = 1.0
+settings.ocean_humidity_coefficient = 0.2
+settings.ocean_humidity_distance_ratio = 0.12
+settings.land_type_snow_temperature = 0.0
+settings.land_type_cold_temperature = 6.0
+settings.land_type_hot_temperature = 22.0
+settings.land_type_dry_humidity = 0.3
+settings.land_type_wet_humidity = 0.7
+settings.land_type_sparse_vegetation = 0.35
+settings.land_type_lush_vegetation = 0.6
+settings.land_type_lowland_elevation = 0.15
+settings.land_type_hill_elevation = 0.4
+settings.land_type_mountain_elevation = 0.7
 settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
@@ -131,22 +143,31 @@ river_vegetation_coefficient`, respectively, and are also clamped to `[0, 1]`.
 Both river climate coefficients are in `[0, 1]`; setting either one to zero
 disables that contribution.
 
-Each land region is classified after river climate contributions are applied.
+Boundary-connected water is treated as ocean. Ocean-adjacent land receives the
+full `ocean_humidity_coefficient`, and the contribution decays smoothly to zero
+over `ocean_humidity_distance_ratio * world bounds diagonal`. Only humidity is
+changed. A zero coefficient or distance ratio disables ocean humidity. Inland
+water that is not connected to the world boundary does not contribute.
+
+Each land region is classified after river and ocean climate contributions are
+applied.
 Elevation is normalized from the region's effective sea level to the maximum
-terrain elevation. Classification uses the following priority order:
+terrain elevation. Land-type settings define shared condition boundaries and
+must satisfy `snow <= cold < hot`, `dry < wet`, `sparse < lush`, and
+`lowland < hill < mountain`. Classification combines conditions in the following
+priority order:
 
 | Land type | Rule |
 | --- | --- |
-| `LAND_TYPE_SNOW_PEAKS` | normalized elevation at least `0.70` and temperature at most `0` |
-| `LAND_TYPE_MOUNTAIN` | normalized elevation at least `0.70` |
-| `LAND_TYPE_TUNDRA` | temperature at most `5` |
-| `LAND_TYPE_HILLS` | normalized elevation at least `0.40` |
-| `LAND_TYPE_SWAMP` | normalized elevation at most `0.12`, humidity at least `0.70`, and vegetation at least `0.50` |
-| `LAND_TYPE_BEACH` | normalized elevation at most `0.06` |
-| `LAND_TYPE_RAINFOREST` | temperature at least `20`, humidity at least `0.70`, and vegetation at least `0.70` |
-| `LAND_TYPE_DESERT` | temperature at least `20`, humidity at most `0.25`, and vegetation at most `0.30` |
-| `LAND_TYPE_FOREST` | humidity at least `0.40` and vegetation at least `0.55` |
-| `LAND_TYPE_SPARSE` | humidity at most `0.30` or vegetation at most `0.30` |
+| `LAND_TYPE_SNOW_PEAKS` | elevation at least `mountain` and temperature at most `snow` |
+| `LAND_TYPE_MOUNTAIN` | elevation at least `mountain` and temperature above `snow` |
+| `LAND_TYPE_TUNDRA` | temperature at most `cold` and vegetation at most `sparse` |
+| `LAND_TYPE_HILLS` | elevation at least `hill` and temperature above `cold` |
+| `LAND_TYPE_SWAMP` | elevation at most `lowland`, temperature above `cold`, humidity at least `wet`, and vegetation at least `lush` |
+| `LAND_TYPE_RAINFOREST` | temperature at least `hot`, humidity at least `wet`, and vegetation at least `lush` |
+| `LAND_TYPE_DESERT` | temperature at least `hot`, humidity at most `dry`, and vegetation at most `sparse` |
+| `LAND_TYPE_FOREST` | temperature above `cold`, humidity above `dry`, and vegetation at least `lush` |
+| `LAND_TYPE_SPARSE` | humidity at most `dry` and vegetation at most `sparse` |
 | `LAND_TYPE_FIELDS` | all remaining land |
 
 `land_types` is aligned with the other compact land-only arrays. Water regions

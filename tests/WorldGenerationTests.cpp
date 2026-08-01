@@ -551,6 +551,7 @@ void testRegionClimate() {
         .poleTemperature = -30.0,
         .vegetationCoefficient = 1.4,
         .humidityCoefficient = 0.8,
+        .oceanHumidityCoefficient = 0.0,
         .riverSourceCount = 0,
     };
     const auto world = WorldGenerator{settings}.generate();
@@ -613,7 +614,8 @@ void testRegionClimate() {
         require(region.landType()
                     == classifyLandType(region.elevation(),
                                         region.seaLevel(),
-                                        actual),
+                                        actual,
+                                        settings.landTypeConditions),
                 "A region stores an incorrect land type.");
         require(region.landType() == repeatedRegion.landType(),
                 "Land types are not deterministic.");
@@ -641,6 +643,12 @@ void testClimateSettingsValidation() {
     requireNear(settings.humidityCoefficient,
                 1.0,
                 "The default humidity coefficient must be one.");
+    requireNear(settings.oceanHumidityCoefficient,
+                0.2,
+                "The default ocean humidity coefficient must be 0.2.");
+    requireNear(settings.oceanHumidityDistanceRatio,
+                0.12,
+                "The default ocean humidity distance ratio must be 0.12.");
 
     settings.equatorTemperature = 50.01;
     try {
@@ -672,6 +680,99 @@ void testClimateSettingsValidation() {
         require(false, "A negative humidity coefficient was accepted.");
     } catch (const std::invalid_argument &) {
     }
+
+    settings.humidityCoefficient = 1.0;
+    settings.oceanHumidityCoefficient = 1.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "An ocean humidity coefficient above one was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.oceanHumidityCoefficient = 0.2;
+    settings.oceanHumidityDistanceRatio = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative ocean humidity distance was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.oceanHumidityDistanceRatio = 0.12;
+    settings.landTypeConditions.dryHumidity =
+        settings.landTypeConditions.wetHumidity;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "Overlapping land type humidity conditions were accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+}
+
+void testOceanHumidity() {
+    const WorldGenerationSettings settings{
+        .bounds = {{0.0, 0.0}, {512.0, 512.0}},
+        .seed = 93,
+        .columns = 16,
+        .rows = 16,
+        .jitter = 0.8,
+        .seaLevel = 0.3,
+        .edgeDecayRatio = {0.1, 0.1},
+        .edgeStrength = 0.2,
+        .noiseOctaves = 5,
+        .noiseFrequency = 0.01,
+        .noiseLacunarity = 2.0,
+        .noisePersistence = 0.5,
+        .humidityCoefficient = 0.0,
+        .oceanHumidityCoefficient = 0.4,
+        .oceanHumidityDistanceRatio = 0.2,
+        .riverSourceCount = 0,
+        .provinceMinimumRegionCount = 1,
+    };
+    const auto world = WorldGenerator{settings}.generate();
+    const auto repeated = WorldGenerator{settings}.generate();
+    auto disabledSettings = settings;
+    disabledSettings.oceanHumidityCoefficient = 0.0;
+    const auto disabled = WorldGenerator{disabledSettings}.generate();
+
+    auto boostedLandCount = std::size_t{0};
+    auto coastalLandCount = std::size_t{0};
+    auto decayedLandCount = std::size_t{0};
+    for (const auto &region : world.regions()) {
+        if (!region.isLand())
+            continue;
+
+        const auto &sample = world.landClimates().at(region.landClimateId());
+        const auto &repeatedSample = repeated.landClimates().at(
+            repeated.regions().at(region.id()).landClimateId());
+        const auto &disabledSample = disabled.landClimates().at(
+            disabled.regions().at(region.id()).landClimateId());
+        requireNear(disabledSample.humidity,
+                    0.0,
+                    "Disabling ocean humidity did not preserve base humidity.");
+        requireNear(sample.vegetation,
+                    disabledSample.vegetation,
+                    "Ocean influence changed vegetation.");
+        require(sample.humidity >= 0.0
+                    && sample.humidity <= settings.oceanHumidityCoefficient,
+                "Ocean humidity is outside its configured contribution range.");
+        require(sample.humidity == repeatedSample.humidity,
+                "Ocean humidity is not deterministic.");
+
+        if (sample.humidity <= 0.0)
+            continue;
+        ++boostedLandCount;
+        if (std::abs(sample.humidity
+                     - settings.oceanHumidityCoefficient) <= tolerance) {
+            ++coastalLandCount;
+        } else {
+            ++decayedLandCount;
+        }
+    }
+    require(boostedLandCount > 0,
+            "Ocean did not increase humidity in any land region.");
+    require(coastalLandCount > 0,
+            "Ocean-adjacent land did not receive the full humidity contribution.");
+    require(decayedLandCount > 0,
+            "Ocean humidity did not decay into inland regions.");
 }
 
 void testProvinceBudgets() {
@@ -1082,6 +1183,7 @@ void testRivers() {
         .noisePersistence = 0.5,
         .vegetationCoefficient = 0.0,
         .humidityCoefficient = 0.0,
+        .oceanHumidityCoefficient = 0.0,
         .riverSourceCount = 24,
         .riverMinimumSourceElevation = 0.5,
         .riverRandomness = 0.35,
@@ -1292,7 +1394,8 @@ void testRivers() {
                     && region.landType()
                            == classifyLandType(region.elevation(),
                                                region.seaLevel(),
-                                               actual),
+                                               actual,
+                                               settings.landTypeConditions),
                 "Land type does not use the river-adjusted climate.");
         if (strongestRiver > 0.0)
             ++riverClimateRegionCount;
@@ -1390,6 +1493,7 @@ int main() {
         testEdgeStrengthValidation();
         testRegionClimate();
         testClimateSettingsValidation();
+        testOceanHumidity();
         testProvinceBudgets();
         testProvinceCostOrdering();
         testProvinceShortBorderPenalty();

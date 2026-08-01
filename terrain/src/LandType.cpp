@@ -7,26 +7,6 @@ namespace worldgen {
 
 namespace {
 
-constexpr double snowPeakElevation = 0.7;
-constexpr double mountainElevation = 0.7;
-constexpr double hillElevation = 0.4;
-constexpr double swampElevation = 0.12;
-constexpr double beachElevation = 0.06;
-
-constexpr double snowTemperature = 0.0;
-constexpr double tundraTemperature = 5.0;
-constexpr double hotTemperature = 20.0;
-
-constexpr double wetHumidity = 0.7;
-constexpr double forestHumidity = 0.4;
-constexpr double dryHumidity = 0.3;
-constexpr double desertHumidity = 0.25;
-
-constexpr double lushVegetation = 0.7;
-constexpr double forestVegetation = 0.55;
-constexpr double sparseVegetation = 0.3;
-constexpr double swampVegetation = 0.5;
-
 [[nodiscard]] double normalizedLandElevation(double elevation,
                                              double seaLevel) noexcept {
     if (seaLevel >= 1.0)
@@ -71,7 +51,6 @@ bool isValidLandType(LandType landType) noexcept {
     case LandType::Forest:
     case LandType::Sparse:
     case LandType::Desert:
-    case LandType::Beach:
     case LandType::Swamp:
     case LandType::Rainforest:
     case LandType::Tundra:
@@ -80,45 +59,91 @@ bool isValidLandType(LandType landType) noexcept {
     return false;
 }
 
+void validateLandTypeConditions(const LandTypeConditions &conditions) {
+    const auto validTemperature = [](double value) {
+        return std::isfinite(value) && value >= -50.0 && value <= 50.0;
+    };
+    if (!validTemperature(conditions.snowTemperature)
+        || !validTemperature(conditions.coldTemperature)
+        || !validTemperature(conditions.hotTemperature)
+        || conditions.snowTemperature > conditions.coldTemperature
+        || conditions.coldTemperature >= conditions.hotTemperature) {
+        throw std::invalid_argument(
+            "Land type temperatures must satisfy -50 <= snow <= cold < hot <= 50.");
+    }
+
+    const auto validRatio = [](double value) {
+        return std::isfinite(value) && value >= 0.0 && value <= 1.0;
+    };
+    if (!validRatio(conditions.dryHumidity)
+        || !validRatio(conditions.wetHumidity)
+        || conditions.dryHumidity >= conditions.wetHumidity) {
+        throw std::invalid_argument(
+            "Land type humidity must satisfy 0 <= dry < wet <= 1.");
+    }
+    if (!validRatio(conditions.sparseVegetation)
+        || !validRatio(conditions.lushVegetation)
+        || conditions.sparseVegetation >= conditions.lushVegetation) {
+        throw std::invalid_argument(
+            "Land type vegetation must satisfy 0 <= sparse < lush <= 1.");
+    }
+    if (!validRatio(conditions.lowlandElevation)
+        || !validRatio(conditions.hillElevation)
+        || !validRatio(conditions.mountainElevation)
+        || conditions.lowlandElevation >= conditions.hillElevation
+        || conditions.hillElevation >= conditions.mountainElevation) {
+        throw std::invalid_argument(
+            "Land type elevations must satisfy 0 <= lowland < hill < mountain <= 1.");
+    }
+}
+
 LandType classifyLandType(double elevation,
                           double seaLevel,
-                          const climate::ClimateSample &climate) {
+                          const climate::ClimateSample &climate,
+                          const LandTypeConditions &conditions) {
     validateInputs(elevation, seaLevel, climate);
+    validateLandTypeConditions(conditions);
     const auto landElevation = normalizedLandElevation(elevation, seaLevel);
 
-    if (landElevation >= snowPeakElevation
-        && climate.temperature <= snowTemperature) {
+    if (landElevation >= conditions.mountainElevation
+        && climate.temperature <= conditions.snowTemperature) {
         return LandType::SnowPeaks;
     }
-    if (landElevation >= mountainElevation)
+    if (landElevation >= conditions.mountainElevation
+        && climate.temperature > conditions.snowTemperature) {
         return LandType::Mountain;
-    if (climate.temperature <= tundraTemperature)
+    }
+    if (climate.temperature <= conditions.coldTemperature
+        && climate.vegetation <= conditions.sparseVegetation) {
         return LandType::Tundra;
-    if (landElevation >= hillElevation)
+    }
+    if (landElevation >= conditions.hillElevation
+        && climate.temperature > conditions.coldTemperature) {
         return LandType::Hills;
-    if (landElevation <= swampElevation
-        && climate.humidity >= wetHumidity
-        && climate.vegetation >= swampVegetation) {
+    }
+    if (landElevation <= conditions.lowlandElevation
+        && climate.temperature > conditions.coldTemperature
+        && climate.humidity >= conditions.wetHumidity
+        && climate.vegetation >= conditions.lushVegetation) {
         return LandType::Swamp;
     }
-    if (landElevation <= beachElevation)
-        return LandType::Beach;
-    if (climate.temperature >= hotTemperature
-        && climate.humidity >= wetHumidity
-        && climate.vegetation >= lushVegetation) {
+    if (climate.temperature >= conditions.hotTemperature
+        && climate.humidity >= conditions.wetHumidity
+        && climate.vegetation >= conditions.lushVegetation) {
         return LandType::Rainforest;
     }
-    if (climate.temperature >= hotTemperature
-        && climate.humidity <= desertHumidity
-        && climate.vegetation <= sparseVegetation) {
+    if (climate.temperature >= conditions.hotTemperature
+        && climate.humidity <= conditions.dryHumidity
+        && climate.vegetation <= conditions.sparseVegetation) {
         return LandType::Desert;
     }
-    if (climate.humidity >= forestHumidity
-        && climate.vegetation >= forestVegetation) {
+    if (climate.temperature > conditions.coldTemperature
+        && climate.humidity > conditions.dryHumidity
+        && climate.vegetation >= conditions.lushVegetation) {
         return LandType::Forest;
     }
-    if (climate.humidity <= dryHumidity
-        || climate.vegetation <= sparseVegetation) {
+    if (climate.humidity <= conditions.dryHumidity
+        && climate.vegetation <= conditions.sparseVegetation) {
         return LandType::Sparse;
     }
     return LandType::Fields;

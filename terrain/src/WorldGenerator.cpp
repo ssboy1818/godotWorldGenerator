@@ -4,13 +4,16 @@
 #include "Fortune.h"
 #include "JitteredGridSiteGenerator.h"
 #include "LandType.h"
+#include "NumericalPolicy.h"
 #include "PerlinNoise.h"
 #include "ProvinceGenerator.h"
 #include "RiverGenerator.h"
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <queue>
 #include <span>
 #include <stdexcept>
 #include <utility>
@@ -74,6 +77,18 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument(
             "Humidity coefficient must be between zero and two.");
     }
+    const auto validOceanHumiditySetting = [](double value) {
+        return std::isfinite(value) && value >= 0.0 && value <= 1.0;
+    };
+    if (!validOceanHumiditySetting(settings.oceanHumidityCoefficient)) {
+        throw std::invalid_argument(
+            "Ocean humidity coefficient must be between zero and one.");
+    }
+    if (!validOceanHumiditySetting(settings.oceanHumidityDistanceRatio)) {
+        throw std::invalid_argument(
+            "Ocean humidity distance ratio must be between zero and one.");
+    }
+    validateLandTypeConditions(settings.landTypeConditions);
     if (!std::isfinite(settings.riverMinimumSourceElevation)
         || settings.riverMinimumSourceElevation < 0.0
         || settings.riverMinimumSourceElevation > 1.0) {
@@ -188,8 +203,145 @@ void applyRiverClimateInfluence(
     }
 }
 
+[[nodiscard]] bool cellTouchesBoundary(const BoundingBox &boundingBox,
+                                       const Cell &cell) noexcept {
+    const auto tolerance = numericalToleranceFor(boundingBox).sharedEdgeLength();
+    return std::ranges::any_of(cell.vertices, [&](Vector2d vertex) {
+        return almostEqual(vertex.x, boundingBox.min.x, tolerance)
+            || almostEqual(vertex.x, boundingBox.max.x, tolerance)
+            || almostEqual(vertex.y, boundingBox.min.y, tolerance)
+            || almostEqual(vertex.y, boundingBox.max.y, tolerance);
+    });
+}
+
+[[nodiscard]] std::vector<bool> findOceanCells(
+    const BoundingBox &boundingBox,
+    const WorldDivision &division,
+    std::span<const Region> regions) {
+    if (division.cells.size() != regions.size()) {
+        throw std::logic_error(
+            "Ocean humidity requires one region per cell.");
+    }
+
+    std::vector<bool> ocean(division.cells.size(), false);
+    std::queue<CellId> pending;
+    for (const auto &cell : division.cells) {
+        if (cell.id >= regions.size() || regions[cell.id].cell() != cell.id) {
+            throw std::logic_error(
+                "Ocean humidity received invalid cell or region IDs.");
+        }
+        if (regions[cell.id].isWater()
+            && cellTouchesBoundary(boundingBox, cell)) {
+            ocean[cell.id] = true;
+            pending.push(cell.id);
+        }
+    }
+
+    while (!pending.empty()) {
+        const auto cell = pending.front();
+        pending.pop();
+        for (const auto neighbor : division.cells[cell].neighbors) {
+            if (neighbor >= regions.size()) {
+                throw std::logic_error(
+                    "An ocean cell references an invalid neighbor.");
+            }
+            if (ocean[neighbor] || !regions[neighbor].isWater())
+                continue;
+            ocean[neighbor] = true;
+            pending.push(neighbor);
+        }
+    }
+    return ocean;
+}
+
+void applyOceanHumidityInfluence(
+    const BoundingBox &boundingBox,
+    const WorldDivision &division,
+    std::span<const Region> regions,
+    std::span<climate::ClimateSample> landClimates,
+    double coefficient,
+    double distanceRatio) {
+    if (coefficient == 0.0 || distanceRatio == 0.0)
+        return;
+
+    const auto ocean = findOceanCells(boundingBox, division, regions);
+    const auto diagonal = (boundingBox.max - boundingBox.min).length();
+    const auto maximumDistance = diagonal * distanceRatio;
+    std::vector<double> distance(
+        division.cells.size(),
+        std::numeric_limits<double>::infinity());
+    using QueueEntry = std::pair<double, CellId>;
+    std::priority_queue<QueueEntry,
+                        std::vector<QueueEntry>,
+                        std::greater<>> pending;
+
+    const auto seed = [&](CellId cell) {
+        if (distance[cell] == 0.0)
+            return;
+        distance[cell] = 0.0;
+        pending.emplace(0.0, cell);
+    };
+    for (CellId cell = 0; cell < ocean.size(); ++cell) {
+        if (!ocean[cell])
+            continue;
+        seed(cell);
+        for (const auto neighbor : division.cells[cell].neighbors) {
+            if (neighbor >= regions.size()) {
+                throw std::logic_error(
+                    "An ocean cell references an invalid neighbor.");
+            }
+            if (regions[neighbor].isLand())
+                seed(neighbor);
+        }
+    }
+
+    while (!pending.empty()) {
+        const auto [currentDistance, cell] = pending.top();
+        pending.pop();
+        if (currentDistance > distance[cell])
+            continue;
+
+        for (const auto neighbor : division.cells[cell].neighbors) {
+            if (neighbor >= division.cells.size()) {
+                throw std::logic_error(
+                    "Ocean humidity encountered an invalid neighbor.");
+            }
+            const auto step = (division.cells[cell].sitePosition
+                               - division.cells[neighbor].sitePosition).length();
+            const auto candidate = currentDistance + step;
+            if (candidate >= distance[neighbor]
+                || candidate > maximumDistance) {
+                continue;
+            }
+            distance[neighbor] = candidate;
+            pending.emplace(candidate, neighbor);
+        }
+    }
+
+    for (const auto &region : regions) {
+        if (!region.isLand() || distance[region.cell()] > maximumDistance)
+            continue;
+        if (region.landClimateId() >= landClimates.size()) {
+            throw std::logic_error(
+                "A land region references an invalid climate sample.");
+        }
+        const auto normalizedDistance = std::clamp(
+            distance[region.cell()] / maximumDistance,
+            0.0,
+            1.0);
+        const auto smoothDistance = normalizedDistance * normalizedDistance
+                                    * (3.0 - 2.0 * normalizedDistance);
+        auto &sample = landClimates[region.landClimateId()];
+        sample.humidity = std::clamp(
+            sample.humidity + coefficient * (1.0 - smoothDistance),
+            0.0,
+            1.0);
+    }
+}
+
 void classifyLandRegions(std::span<Region> regions,
-                         std::span<const climate::ClimateSample> landClimates) {
+                         std::span<const climate::ClimateSample> landClimates,
+                         const LandTypeConditions &conditions) {
     for (auto &region : regions) {
         if (!region.isLand())
             continue;
@@ -200,7 +352,8 @@ void classifyLandRegions(std::span<Region> regions,
         region.setLandType(classifyLandType(
             region.elevation(),
             region.seaLevel(),
-            landClimates[region.landClimateId()]));
+            landClimates[region.landClimateId()],
+            conditions));
     }
 }
 
@@ -296,7 +449,15 @@ World WorldGenerator::generate() const {
                                rivers,
                                m_settings.riverHumidityCoefficient,
                                m_settings.riverVegetationCoefficient);
-    classifyLandRegions(regions, landClimates);
+    applyOceanHumidityInfluence(boundingBox,
+                                division,
+                                regions,
+                                landClimates,
+                                m_settings.oceanHumidityCoefficient,
+                                m_settings.oceanHumidityDistanceRatio);
+    classifyLandRegions(regions,
+                        landClimates,
+                        m_settings.landTypeConditions);
 
     auto provinces = generateProvinces(
         boundingBox,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LandType.h"
 #include "World.h"
 
 #include <cstddef>
@@ -28,6 +29,10 @@ struct WorldGenerationSettings {
     double poleTemperature{-20.0};
     double vegetationCoefficient{1.0};
     double humidityCoefficient{1.0};
+    double oceanHumidityCoefficient{0.2};
+    double oceanHumidityDistanceRatio{0.12};
+
+    LandTypeConditions landTypeConditions;
 
     std::size_t riverSourceCount{12};
     double riverMinimumSourceElevation{0.6};

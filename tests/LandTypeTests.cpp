@@ -49,7 +49,7 @@ void testEveryLandType() {
     requireType(LandType::Tundra,
                 0.55,
                 seaLevel,
-                climate(0.0, 0.5, 0.4),
+                climate(0.0, 0.5, 0.2),
                 "Cold lower land was not classified as tundra.");
     requireType(LandType::Hills,
                 0.67,
@@ -61,11 +61,6 @@ void testEveryLandType() {
                 seaLevel,
                 climate(18.0, 0.8, 0.7),
                 "Wet vegetated lowland was not classified as swamp.");
-    requireType(LandType::Beach,
-                0.43,
-                seaLevel,
-                climate(18.0, 0.4, 0.4),
-                "Shoreline land was not classified as beach.");
     requireType(LandType::Rainforest,
                 0.55,
                 seaLevel,
@@ -100,16 +95,52 @@ void testNormalizedElevation() {
                 0.5,
                 sample,
                 "Mountain classification ignored normalized height above sea level.");
-    requireType(LandType::Beach,
-                0.904,
+    requireType(LandType::Swamp,
+                0.91,
                 0.9,
-                sample,
-                "Beach classification ignored a high local sea level.");
+                climate(15.0, 0.8, 0.7),
+                "Lowland classification ignored a high local sea level.");
+}
+
+void testClimateSynergy() {
+    constexpr double seaLevel = 0.4;
+    requireType(LandType::Fields,
+                0.55,
+                seaLevel,
+                climate(0.0, 0.8, 0.8),
+                "Cold lush land became tundra from temperature alone.");
+    requireType(LandType::Fields,
+                0.46,
+                seaLevel,
+                climate(15.0, 0.5, 0.5),
+                "Low land became swamp without wet lush conditions.");
+    requireType(LandType::Fields,
+                0.55,
+                seaLevel,
+                climate(15.0, 0.8, 0.5),
+                "Humidity alone classified land as forest.");
+
+    auto conditions = LandTypeConditions{};
+    conditions.hotTemperature = 30.0;
+    require(classifyLandType(0.55,
+                             seaLevel,
+                             climate(25.0, 0.2, 0.2),
+                             conditions)
+                == LandType::Sparse,
+            "Custom hot-temperature conditions did not affect classification.");
 }
 
 void testValidation() {
     require(!isValidLandType(static_cast<LandType>(255)),
             "An unknown land type value was accepted.");
+
+    auto conditions = LandTypeConditions{};
+    conditions.dryHumidity = conditions.wetHumidity;
+    try {
+        validateLandTypeConditions(conditions);
+        require(false, "Overlapping humidity conditions were accepted.");
+    } catch (const std::invalid_argument &) {
+    }
 
     try {
         static_cast<void>(classifyLandType(
@@ -138,6 +169,7 @@ int main() {
     try {
         testEveryLandType();
         testNormalizedElevation();
+        testClimateSynergy();
         testValidation();
         std::cout << "Land type tests passed.\n";
         return 0;

@@ -17,10 +17,9 @@ func _initialize() -> void:
     assert(VoronoiWorldData.LAND_TYPE_FOREST == 4)
     assert(VoronoiWorldData.LAND_TYPE_SPARSE == 5)
     assert(VoronoiWorldData.LAND_TYPE_DESERT == 6)
-    assert(VoronoiWorldData.LAND_TYPE_BEACH == 7)
-    assert(VoronoiWorldData.LAND_TYPE_SWAMP == 8)
-    assert(VoronoiWorldData.LAND_TYPE_RAINFOREST == 9)
-    assert(VoronoiWorldData.LAND_TYPE_TUNDRA == 10)
+    assert(VoronoiWorldData.LAND_TYPE_SWAMP == 7)
+    assert(VoronoiWorldData.LAND_TYPE_RAINFOREST == 8)
+    assert(VoronoiWorldData.LAND_TYPE_TUNDRA == 9)
 
     var settings := WorldgenSettings.new()
     assert(is_equal_approx(settings.edge_strength, 0.55))
@@ -41,6 +40,18 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.pole_temperature, -20.0))
     assert(is_equal_approx(settings.vegetation_coefficient, 1.0))
     assert(is_equal_approx(settings.humidity_coefficient, 1.0))
+    assert(is_equal_approx(settings.ocean_humidity_coefficient, 0.2))
+    assert(is_equal_approx(settings.ocean_humidity_distance_ratio, 0.12))
+    assert(is_equal_approx(settings.land_type_snow_temperature, 0.0))
+    assert(is_equal_approx(settings.land_type_cold_temperature, 6.0))
+    assert(is_equal_approx(settings.land_type_hot_temperature, 22.0))
+    assert(is_equal_approx(settings.land_type_dry_humidity, 0.3))
+    assert(is_equal_approx(settings.land_type_wet_humidity, 0.7))
+    assert(is_equal_approx(settings.land_type_sparse_vegetation, 0.35))
+    assert(is_equal_approx(settings.land_type_lush_vegetation, 0.6))
+    assert(is_equal_approx(settings.land_type_lowland_elevation, 0.15))
+    assert(is_equal_approx(settings.land_type_hill_elevation, 0.4))
+    assert(is_equal_approx(settings.land_type_mountain_elevation, 0.7))
     settings.bounds = Rect2(0.0, 0.0, 512.0, 512.0)
     settings.seed = 93
     settings.columns = 16
@@ -53,6 +64,18 @@ func _initialize() -> void:
     settings.pole_temperature = -25.0
     settings.vegetation_coefficient = 1.25
     settings.humidity_coefficient = 0.8
+    settings.ocean_humidity_coefficient = 0.18
+    settings.ocean_humidity_distance_ratio = 0.15
+    settings.land_type_snow_temperature = -1.0
+    settings.land_type_cold_temperature = 7.0
+    settings.land_type_hot_temperature = 21.0
+    settings.land_type_dry_humidity = 0.28
+    settings.land_type_wet_humidity = 0.68
+    settings.land_type_sparse_vegetation = 0.32
+    settings.land_type_lush_vegetation = 0.62
+    settings.land_type_lowland_elevation = 0.14
+    settings.land_type_hill_elevation = 0.42
+    settings.land_type_mountain_elevation = 0.72
     settings.river_source_count = 24
     settings.river_minimum_source_elevation = 0.5
     settings.river_randomness = 0.35

@@ -27,10 +27,9 @@ public:
         LAND_TYPE_FOREST = 4,
         LAND_TYPE_SPARSE = 5,
         LAND_TYPE_DESERT = 6,
-        LAND_TYPE_BEACH = 7,
-        LAND_TYPE_SWAMP = 8,
-        LAND_TYPE_RAINFOREST = 9,
-        LAND_TYPE_TUNDRA = 10,
+        LAND_TYPE_SWAMP = 7,
+        LAND_TYPE_RAINFOREST = 8,
+        LAND_TYPE_TUNDRA = 9,
     };
 
     VoronoiWorldData() = default;
