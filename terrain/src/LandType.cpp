@@ -7,22 +7,13 @@ namespace worldgen {
 
 namespace {
 
-[[nodiscard]] double normalizedLandElevation(double elevation,
-                                             double seaLevel) noexcept {
-    if (seaLevel >= 1.0)
-        return 0.0;
-    return (elevation - seaLevel) / (1.0 - seaLevel);
-}
-
-void validateInputs(double elevation,
-                    double seaLevel,
+void validateInputs(double normalizedElevation,
                     const climate::ClimateSample &climate) {
-    if (!std::isfinite(elevation) || elevation < 0.0 || elevation > 1.0)
-        throw std::invalid_argument("Land elevation must be between zero and one.");
-    if (!std::isfinite(seaLevel) || seaLevel < 0.0 || seaLevel > 1.0)
-        throw std::invalid_argument("Land sea level must be between zero and one.");
-    if (elevation < seaLevel)
-        throw std::invalid_argument("A land type requires elevation at or above sea level.");
+    if (!std::isfinite(normalizedElevation)
+        || normalizedElevation < 0.0 || normalizedElevation > 1.0) {
+        throw std::invalid_argument(
+            "Normalized land elevation must be between zero and one.");
+    }
     if (!std::isfinite(climate.temperature)
         || climate.temperature < -50.0 || climate.temperature > 50.0) {
         throw std::invalid_argument(
@@ -97,19 +88,17 @@ void validateLandTypeConditions(const LandTypeConditions &conditions) {
     }
 }
 
-LandType classifyLandType(double elevation,
-                          double seaLevel,
+LandType classifyLandType(double normalizedElevation,
                           const climate::ClimateSample &climate,
                           const LandTypeConditions &conditions) {
-    validateInputs(elevation, seaLevel, climate);
+    validateInputs(normalizedElevation, climate);
     validateLandTypeConditions(conditions);
-    const auto landElevation = normalizedLandElevation(elevation, seaLevel);
 
-    if (landElevation >= conditions.mountainElevation
+    if (normalizedElevation >= conditions.mountainElevation
         && climate.temperature <= conditions.snowTemperature) {
         return LandType::SnowPeaks;
     }
-    if (landElevation >= conditions.mountainElevation
+    if (normalizedElevation >= conditions.mountainElevation
         && climate.temperature > conditions.snowTemperature) {
         return LandType::Mountain;
     }
@@ -117,11 +106,11 @@ LandType classifyLandType(double elevation,
         && climate.vegetation <= conditions.sparseVegetation) {
         return LandType::Tundra;
     }
-    if (landElevation >= conditions.hillElevation
+    if (normalizedElevation >= conditions.hillElevation
         && climate.temperature > conditions.coldTemperature) {
         return LandType::Hills;
     }
-    if (landElevation <= conditions.lowlandElevation
+    if (normalizedElevation <= conditions.lowlandElevation
         && climate.temperature > conditions.coldTemperature
         && climate.humidity >= conditions.wetHumidity
         && climate.vegetation >= conditions.lushVegetation) {

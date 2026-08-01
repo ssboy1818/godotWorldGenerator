@@ -49,14 +49,14 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.ocean_humidity_distance_ratio, 0.12))
     assert(is_equal_approx(settings.land_type_snow_temperature, 0.0))
     assert(is_equal_approx(settings.land_type_cold_temperature, 6.0))
-    assert(is_equal_approx(settings.land_type_hot_temperature, 22.0))
-    assert(is_equal_approx(settings.land_type_dry_humidity, 0.3))
-    assert(is_equal_approx(settings.land_type_wet_humidity, 0.7))
-    assert(is_equal_approx(settings.land_type_sparse_vegetation, 0.35))
-    assert(is_equal_approx(settings.land_type_lush_vegetation, 0.6))
-    assert(is_equal_approx(settings.land_type_lowland_elevation, 0.15))
-    assert(is_equal_approx(settings.land_type_hill_elevation, 0.4))
-    assert(is_equal_approx(settings.land_type_mountain_elevation, 0.7))
+    assert(is_equal_approx(settings.land_type_hot_temperature, 20.0))
+    assert(is_equal_approx(settings.land_type_dry_humidity, 0.45))
+    assert(is_equal_approx(settings.land_type_wet_humidity, 0.62))
+    assert(is_equal_approx(settings.land_type_sparse_vegetation, 0.45))
+    assert(is_equal_approx(settings.land_type_lush_vegetation, 0.54))
+    assert(is_equal_approx(settings.land_type_lowland_elevation, 0.18))
+    assert(is_equal_approx(settings.land_type_hill_elevation, 0.38))
+    assert(is_equal_approx(settings.land_type_mountain_elevation, 0.68))
     settings.bounds = Rect2(0.0, 0.0, 512.0, 512.0)
     settings.seed = 93
     settings.columns = 16
@@ -130,6 +130,9 @@ func _initialize() -> void:
     assert(world.province_remaining_scores.size() == world.province_count)
     assert(world.region_province_indices.size() == world.cell_count)
     assert(world.province_offsets[-1] == world.province_region_ids.size())
+    var land_type_counts: Array[int] = []
+    land_type_counts.resize(10)
+    land_type_counts.fill(0)
     for region in world.cell_count:
         var land: int = world.region_land_indices[region]
         if world.region_types[region] == VoronoiWorldData.REGION_TYPE_LAND:
@@ -143,8 +146,19 @@ func _initialize() -> void:
             assert(world.land_vegetations[land] <= 1.0)
             assert(world.land_types[land] >= VoronoiWorldData.LAND_TYPE_MOUNTAIN)
             assert(world.land_types[land] <= VoronoiWorldData.LAND_TYPE_TUNDRA)
+            land_type_counts[world.land_types[land]] += 1
+            if world.land_types[land] == VoronoiWorldData.LAND_TYPE_DESERT:
+                assert(world.land_temperatures[land]
+                       >= settings.land_type_hot_temperature)
+                assert(world.land_humidities[land]
+                       <= settings.land_type_dry_humidity)
+                assert(world.land_vegetations[land]
+                       <= settings.land_type_sparse_vegetation)
         else:
             assert(land == -1)
+    assert(land_type_counts[VoronoiWorldData.LAND_TYPE_MOUNTAIN]
+           + land_type_counts[VoronoiWorldData.LAND_TYPE_SNOW_PEAKS] > 0)
+    assert(land_type_counts[VoronoiWorldData.LAND_TYPE_HILLS] > 0)
     var river_region_edges := 0
     for river in world.cell_edge_rivers:
         assert(river >= -1 and river < world.river_count)

@@ -38,9 +38,10 @@ world or provide a complete visualization demo.
    corresponding region edge indices. Increase humidity and vegetation in land
    regions adjoining rivers according to the strongest local segment's flow.
    Identify boundary-connected ocean cells and add distance-decayed ocean
-   humidity to land. Finalize temperature from shaped latitude, independent
-   temperature noise, normalized elevation, and the adjusted humidity, then
-   classify every land region from compound final-climate and
+   humidity to land. Normalize land relief against the greatest generated height
+   above local effective sea level. Finalize temperature from shaped latitude,
+   independent temperature noise, normalized elevation, and the adjusted
+   humidity, then classify every land region from compound final-climate and
    normalized-elevation conditions.
 9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
    river, normalized seed-distance, short shared-border, and base claim costs.
@@ -141,8 +142,8 @@ The domain-level orchestration layer.
   assembles a `World`.
 - `LandType` classifies land as mountain, snow peaks, hills, fields, forest,
   sparse, desert, swamp, rainforest, or tundra from configurable compound
-  conditions over its final climate and normalized elevation above the effective
-  sea level.
+  conditions over its final climate and actual land relief normalized by the
+  world's greatest generated height above local effective sea level.
 - `RiverNode` stores a polygon vertex and accumulated flow strength. `River`
   stores an ordered node vector plus the ID of its shared downstream segment.
 - `World` owns the generated diagram, regions, rivers, and provinces.

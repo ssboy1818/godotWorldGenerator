@@ -22,25 +22,24 @@ enum class LandType : std::uint8_t {
 struct LandTypeConditions {
     double snowTemperature{0.0};
     double coldTemperature{6.0};
-    double hotTemperature{22.0};
+    double hotTemperature{20.0};
 
-    double dryHumidity{0.3};
-    double wetHumidity{0.7};
+    double dryHumidity{0.45};
+    double wetHumidity{0.62};
 
-    double sparseVegetation{0.35};
-    double lushVegetation{0.6};
+    double sparseVegetation{0.45};
+    double lushVegetation{0.54};
 
-    double lowlandElevation{0.15};
-    double hillElevation{0.4};
-    double mountainElevation{0.7};
+    double lowlandElevation{0.18};
+    double hillElevation{0.38};
+    double mountainElevation{0.68};
 };
 
 [[nodiscard]] bool isValidLandType(LandType landType) noexcept;
 void validateLandTypeConditions(const LandTypeConditions &conditions);
 
 [[nodiscard]] LandType classifyLandType(
-    double elevation,
-    double seaLevel,
+    double normalizedElevation,
     const climate::ClimateSample &climate,
     const LandTypeConditions &conditions = {});
 

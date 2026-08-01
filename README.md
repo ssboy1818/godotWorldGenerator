@@ -85,14 +85,14 @@ settings.ocean_humidity_coefficient = 0.2
 settings.ocean_humidity_distance_ratio = 0.12
 settings.land_type_snow_temperature = 0.0
 settings.land_type_cold_temperature = 6.0
-settings.land_type_hot_temperature = 22.0
-settings.land_type_dry_humidity = 0.3
-settings.land_type_wet_humidity = 0.7
-settings.land_type_sparse_vegetation = 0.35
-settings.land_type_lush_vegetation = 0.6
-settings.land_type_lowland_elevation = 0.15
-settings.land_type_hill_elevation = 0.4
-settings.land_type_mountain_elevation = 0.7
+settings.land_type_hot_temperature = 20.0
+settings.land_type_dry_humidity = 0.45
+settings.land_type_wet_humidity = 0.62
+settings.land_type_sparse_vegetation = 0.45
+settings.land_type_lush_vegetation = 0.54
+settings.land_type_lowland_elevation = 0.18
+settings.land_type_hill_elevation = 0.38
+settings.land_type_mountain_elevation = 0.68
 settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
@@ -167,20 +167,23 @@ temperature = clamp(base
 Temperature noise has its own deterministic seed domain and
 `temperature_noise_frequency`; it reuses the common octave, lacunarity, and
 persistence settings. A strength of zero restores a smooth latitude curve.
-Elevation is normalized above each region's effective sea level, so high land is
-cooled without tying the result to an absolute world height. The centered
-humidity term weakly warms dry land and cools wet land without shifting a neutral
-humidity of `0.5`. Set either influence to zero to disable it. Both endpoint
-temperatures must be in `[-50, 50]`, the pole cannot be warmer than the equator,
-and the finalized result is clamped to that range. Noise strength, elevation
-cooling, and humidity influence are in `[0, 100]`; noise frequency must be
-positive, and the latitude exponent is in `(0, 10]`.
+Elevation uses actual generated relief: each land region's height above its local
+effective sea level is divided by the greatest land relief in that world. This
+makes the highest land `1`, keeps coast-level land near `0`, and avoids comparing
+ordinary generated terrain with an unreachable theoretical elevation of `1`.
+The same normalized value drives temperature cooling and land classification.
+The centered humidity term weakly warms dry land and cools wet land without
+shifting a neutral humidity of `0.5`. Set either influence to zero to disable it.
+Both endpoint temperatures must be in `[-50, 50]`, the pole cannot be warmer than
+the equator, and the finalized result is clamped to that range. Noise strength,
+elevation cooling, and humidity influence are in `[0, 100]`; noise frequency must
+be positive, and the latitude exponent is in `(0, 10]`.
 
 Each land region is classified after river and ocean contributions and final
 temperature are applied.
-Elevation is normalized from the region's effective sea level to the maximum
-terrain elevation. Land-type settings define shared condition boundaries and
-must satisfy `snow <= cold < hot`, `dry < wet`, `sparse < lush`, and
+Elevation uses the shared actual-relief normalization described above. Land-type
+settings define shared condition boundaries and must satisfy
+`snow <= cold < hot`, `dry < wet`, `sparse < lush`, and
 `lowland < hill < mountain`. Classification combines conditions in the following
 priority order:
 

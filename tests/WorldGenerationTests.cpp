@@ -6,6 +6,7 @@
 #include "WorldGenerator.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -49,11 +50,22 @@ double normalizedDistance(const BoundingBox &bounds,
                                / std::hypot(width, height));
 }
 
-double normalizedLandElevation(const Region &region) {
-    if (region.seaLevel() >= 1.0)
+double maximumLandRelief(const World &world) {
+    auto maximum = 0.0;
+    for (const auto &region : world.regions()) {
+        if (region.isLand()) {
+            maximum = std::max(maximum,
+                               region.elevation() - region.seaLevel());
+        }
+    }
+    return maximum;
+}
+
+double normalizedLandElevation(const Region &region, double maximumRelief) {
+    if (maximumRelief == 0.0)
         return 0.0;
     return std::clamp((region.elevation() - region.seaLevel())
-                          / (1.0 - region.seaLevel()),
+                          / maximumRelief,
                       0.0,
                       1.0);
 }
@@ -565,6 +577,7 @@ void testRegionClimate() {
     };
     const auto world = WorldGenerator{settings}.generate();
     const auto repeated = WorldGenerator{settings}.generate();
+    const auto maximumRelief = maximumLandRelief(world);
     const climate::ClimateGenerator climateGenerator{{
         .bounds = settings.bounds,
         .seed = settings.seed,
@@ -611,7 +624,7 @@ void testRegionClimate() {
         auto expected = climateGenerator.sample(cell.sitePosition);
         expected.temperature = climateGenerator.temperature(
             cell.sitePosition,
-            normalizedLandElevation(region),
+            normalizedLandElevation(region, maximumRelief),
             expected.humidity);
         const auto &actual = world.landClimates().at(region.landClimateId());
         const auto &repeatedClimate = repeated.landClimates().at(
@@ -630,8 +643,8 @@ void testRegionClimate() {
                     && actual.vegetation == repeatedClimate.vegetation,
                 "Land climate values are not deterministic.");
         require(region.landType()
-                    == classifyLandType(region.elevation(),
-                                        region.seaLevel(),
+                    == classifyLandType(normalizedLandElevation(region,
+                                                                 maximumRelief),
                                         actual,
                                         settings.landTypeConditions),
                 "A region stores an incorrect land type.");
@@ -643,6 +656,48 @@ void testRegionClimate() {
             "The land climate array is not dense.");
     require(expectedLandClimate > 0 && waterRegionCount > 0,
             "The compact climate fixture needs both land and water regions.");
+}
+
+void testDefaultLandTypeDiversity() {
+    const WorldGenerationSettings settings{
+        .bounds = {{0.0, 0.0}, {2048.0, 2048.0}},
+    };
+    const auto world = WorldGenerator{settings}.generate();
+    std::array<std::size_t, 10> counts{};
+    for (const auto &region : world.regions()) {
+        if (!region.isLand())
+            continue;
+        ++counts[static_cast<std::size_t>(region.landType())];
+        if (region.landType() != LandType::Desert)
+            continue;
+
+        const auto &sample = world.landClimates().at(region.landClimateId());
+        require(sample.temperature
+                    >= settings.landTypeConditions.hotTemperature
+                    && sample.humidity
+                           <= settings.landTypeConditions.dryHumidity
+                    && sample.vegetation
+                           <= settings.landTypeConditions.sparseVegetation,
+                "A desert violates its final climate conditions.");
+    }
+
+    const auto landCount = world.landClimates().size();
+    const auto mountainCount =
+        counts[static_cast<std::size_t>(LandType::Mountain)]
+        + counts[static_cast<std::size_t>(LandType::SnowPeaks)];
+    require(mountainCount > 0,
+            "Default actual-relief normalization produced no mountains.");
+    require(counts[static_cast<std::size_t>(LandType::Hills)] > 0,
+            "Default actual-relief normalization produced no hills.");
+    require(counts[static_cast<std::size_t>(LandType::Fields)] * 4
+                < landCount * 3,
+            "Fields still occupy at least three quarters of default land.");
+    require(std::ranges::count_if(counts,
+                                  [](std::size_t count) {
+                                      return count > 0;
+                                  })
+                >= 7,
+            "The default world generated fewer than seven land types.");
 }
 
 void testClimateSettingsValidation() {
@@ -1278,6 +1333,7 @@ void testRivers() {
     };
     const auto world = WorldGenerator{settings}.generate();
     const auto repeated = WorldGenerator{settings}.generate();
+    const auto maximumRelief = maximumLandRelief(world);
     constexpr double coordinateTolerance = 1e-7;
 
     require(!world.rivers().empty(), "River generation did not produce any rivers.");
@@ -1456,7 +1512,7 @@ void testRivers() {
         const auto &actual = world.landClimates().at(region.landClimateId());
         const auto expectedTemperature = climateGenerator.temperature(
             world.division().cells.at(region.cell()).sitePosition,
-            normalizedLandElevation(region),
+            normalizedLandElevation(region, maximumRelief),
             actual.humidity);
         requireNear(actual.temperature,
                     expectedTemperature,
@@ -1484,8 +1540,9 @@ void testRivers() {
                 "River climate influence is not deterministic.");
         require(region.hasLandType()
                     && region.landType()
-                           == classifyLandType(region.elevation(),
-                                               region.seaLevel(),
+                           == classifyLandType(normalizedLandElevation(
+                                                   region,
+                                                   maximumRelief),
                                                actual,
                                                settings.landTypeConditions),
                 "Land type does not use the river-adjusted climate.");
@@ -1584,6 +1641,7 @@ int main() {
         testEffectiveSeaLevel();
         testEdgeStrengthValidation();
         testRegionClimate();
+        testDefaultLandTypeDiversity();
         testClimateSettingsValidation();
         testOceanHumidity();
         testProvinceBudgets();

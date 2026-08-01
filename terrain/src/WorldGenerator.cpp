@@ -17,6 +17,7 @@
 #include <span>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace worldgen {
 
@@ -365,11 +366,56 @@ void applyOceanHumidityInfluence(
     }
 }
 
+[[nodiscard]] std::vector<double> normalizeLandElevations(
+    std::span<const Region> regions,
+    std::size_t landClimateCount) {
+    std::vector<double> normalizedElevations(landClimateCount, 0.0);
+    std::vector<bool> populated(landClimateCount, false);
+    auto maximumRelief = 0.0;
+    for (const auto &region : regions) {
+        if (!region.isLand())
+            continue;
+        if (region.landClimateId() >= normalizedElevations.size()
+            || populated[region.landClimateId()]) {
+            throw std::logic_error(
+                "Elevation normalization received invalid land climate IDs.");
+        }
+        const auto relief = region.elevation() - region.seaLevel();
+        if (!std::isfinite(relief) || relief < 0.0) {
+            throw std::logic_error(
+                "Elevation normalization received invalid land relief.");
+        }
+        maximumRelief = std::max(maximumRelief, relief);
+        populated[region.landClimateId()] = true;
+    }
+    if (std::ranges::find(populated, false) != populated.end()) {
+        throw std::logic_error(
+            "Elevation normalization did not receive every land climate.");
+    }
+    if (maximumRelief == 0.0)
+        return normalizedElevations;
+
+    for (const auto &region : regions) {
+        if (!region.isLand())
+            continue;
+        normalizedElevations[region.landClimateId()] = std::clamp(
+            (region.elevation() - region.seaLevel()) / maximumRelief,
+            0.0,
+            1.0);
+    }
+    return normalizedElevations;
+}
+
 void finalizeLandTemperatures(
     const WorldDivision &division,
     std::span<const Region> regions,
     std::span<climate::ClimateSample> landClimates,
+    std::span<const double> normalizedElevations,
     const climate::ClimateGenerator &climateGenerator) {
+    if (normalizedElevations.size() != landClimates.size()) {
+        throw std::logic_error(
+            "Temperature finalization received inconsistent elevation data.");
+    }
     for (const auto &region : regions) {
         if (!region.isLand())
             continue;
@@ -379,26 +425,22 @@ void finalizeLandTemperatures(
                 "Temperature finalization received invalid region data.");
         }
 
-        const auto normalizedElevation = region.seaLevel() >= 1.0
-                                             ? 0.0
-                                             : std::clamp(
-                                                   (region.elevation()
-                                                    - region.seaLevel())
-                                                       / (1.0
-                                                          - region.seaLevel()),
-                                                   0.0,
-                                                   1.0);
         auto &sample = landClimates[region.landClimateId()];
         sample.temperature = climateGenerator.temperature(
             division.cells[region.cell()].sitePosition,
-            normalizedElevation,
+            normalizedElevations[region.landClimateId()],
             sample.humidity);
     }
 }
 
 void classifyLandRegions(std::span<Region> regions,
                          std::span<const climate::ClimateSample> landClimates,
+                         std::span<const double> normalizedElevations,
                          const LandTypeConditions &conditions) {
+    if (normalizedElevations.size() != landClimates.size()) {
+        throw std::logic_error(
+            "Land classification received inconsistent elevation data.");
+    }
     for (auto &region : regions) {
         if (!region.isLand())
             continue;
@@ -407,8 +449,7 @@ void classifyLandRegions(std::span<Region> regions,
                 "A land region references an invalid climate sample.");
         }
         region.setLandType(classifyLandType(
-            region.elevation(),
-            region.seaLevel(),
+            normalizedElevations[region.landClimateId()],
             landClimates[region.landClimateId()],
             conditions));
     }
@@ -521,12 +562,17 @@ World WorldGenerator::generate() const {
                                 landClimates,
                                 m_settings.oceanHumidityCoefficient,
                                 m_settings.oceanHumidityDistanceRatio);
+    const auto normalizedLandElevations = normalizeLandElevations(
+        regions,
+        landClimates.size());
     finalizeLandTemperatures(division,
                              regions,
                              landClimates,
+                             normalizedLandElevations,
                              climateGenerator);
     classifyLandRegions(regions,
                         landClimates,
+                        normalizedLandElevations,
                         m_settings.landTypeConditions);
 
     auto provinces = generateProvinces(
