@@ -116,6 +116,12 @@ void WorldgenSettings::_bind_methods() {
         godot::D_METHOD("get_province_elevation_contribution"),
         &WorldgenSettings::provinceElevationContribution);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_distance_contribution", "contribution"),
+        &WorldgenSettings::setProvinceDistanceContribution);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_distance_contribution"),
+        &WorldgenSettings::provinceDistanceContribution);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("set_province_base_cost", "cost"),
         &WorldgenSettings::setProvinceBaseCost);
     godot::ClassDB::bind_method(
@@ -246,6 +252,12 @@ void WorldgenSettings::_bind_methods() {
                                      "0,1000,0.01,or_greater"),
                  "set_province_elevation_contribution",
                  "get_province_elevation_contribution");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "province_distance_contribution",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1000,0.01,or_greater"),
+                 "set_province_distance_contribution",
+                 "get_province_distance_contribution");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
                                      "province_base_cost",
                                      godot::PROPERTY_HINT_RANGE,
@@ -435,6 +447,14 @@ void WorldgenSettings::setProvinceElevationContribution(double contribution) {
 
 double WorldgenSettings::provinceElevationContribution() const noexcept {
     return m_provinceElevationContribution;
+}
+
+void WorldgenSettings::setProvinceDistanceContribution(double contribution) {
+    m_provinceDistanceContribution = contribution;
+}
+
+double WorldgenSettings::provinceDistanceContribution() const noexcept {
+    return m_provinceDistanceContribution;
 }
 
 void WorldgenSettings::setProvinceBaseCost(double cost) {

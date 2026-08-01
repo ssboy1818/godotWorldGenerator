@@ -83,6 +83,9 @@ public:
     void setProvinceElevationContribution(double contribution);
     [[nodiscard]] double provinceElevationContribution() const noexcept;
 
+    void setProvinceDistanceContribution(double contribution);
+    [[nodiscard]] double provinceDistanceContribution() const noexcept;
+
     void setProvinceBaseCost(double cost);
     [[nodiscard]] double provinceBaseCost() const noexcept;
 
@@ -113,6 +116,7 @@ private:
     double m_provinceStartScore{10.0};
     double m_provinceRiverContribution{5.0};
     double m_provinceElevationContribution{10.0};
+    double m_provinceDistanceContribution{5.0};
     double m_provinceBaseCost{1.0};
 };
 

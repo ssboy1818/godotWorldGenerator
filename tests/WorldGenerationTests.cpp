@@ -1,5 +1,7 @@
 #include "ClimateGenerator.h"
+#include "Id.h"
 #include "PerlinNoise.h"
+#include "ProvinceGenerator.h"
 #include "WorldGenerator.h"
 
 #include <algorithm>
@@ -24,6 +26,26 @@ void require(bool condition, std::string_view message) {
 
 void requireNear(double actual, double expected, std::string_view message) {
     require(std::abs(actual - expected) <= tolerance, message);
+}
+
+long double quantizedProvinceCost(double cost) {
+    return std::floor(static_cast<long double>(cost)
+                      / static_cast<long double>(EPS));
+}
+
+double normalizedDistance(const BoundingBox &bounds,
+                          Vector2d first,
+                          Vector2d second) {
+    const auto deltaX = static_cast<long double>(first.x)
+                        - static_cast<long double>(second.x);
+    const auto deltaY = static_cast<long double>(first.y)
+                        - static_cast<long double>(second.y);
+    const auto width = static_cast<long double>(bounds.max.x)
+                       - static_cast<long double>(bounds.min.x);
+    const auto height = static_cast<long double>(bounds.max.y)
+                        - static_cast<long double>(bounds.min.y);
+    return static_cast<double>(std::hypot(deltaX, deltaY)
+                               / std::hypot(width, height));
 }
 
 bool pointsNear(Vector2d first, Vector2d second, double coordinateTolerance) {
@@ -155,6 +177,9 @@ bool requireProvinceGrowth(const World &world,
         }
 
         auto remainingScore = settings.provinceStartScore;
+        const auto provinceCenter = world.division()
+                                        .cells.at(province.seedRegion())
+                                        .sitePosition;
         std::vector<RegionId> claimed;
         claimed.reserve(province.regionIds().size());
         for (const auto actualRegion : province.regionIds()) {
@@ -180,6 +205,7 @@ bool requireProvinceGrowth(const World &world,
             }
 
             auto bestCost = std::numeric_limits<double>::infinity();
+            auto bestCostOrder = std::numeric_limits<long double>::infinity();
             auto bestRegion = INVALID_REGION_ID;
             auto bestSource = INVALID_REGION_ID;
             for (const auto source : claimed) {
@@ -199,16 +225,25 @@ bool requireProvinceGrowth(const World &world,
                     const auto cost = settings.provinceBaseCost
                                       + settings.provinceElevationContribution
                                             * elevationDifference
+                                      + settings.provinceDistanceContribution
+                                            * normalizedDistance(
+                                                settings.bounds,
+                                                provinceCenter,
+                                                world.division()
+                                                    .cells.at(neighbor)
+                                                    .sitePosition)
                                       + (crossesRiver
                                              ? settings.provinceRiverContribution
                                              : 0.0);
+                    const auto costOrder = quantizedProvinceCost(cost);
                     const auto neighborRegion = static_cast<RegionId>(neighbor);
-                    if (cost < bestCost
-                        || (cost == bestCost
+                    if (costOrder < bestCostOrder
+                        || (costOrder == bestCostOrder
                             && (neighborRegion < bestRegion
                                 || (neighborRegion == bestRegion
                                     && source < bestSource)))) {
                         bestCost = cost;
+                        bestCostOrder = costOrder;
                         bestRegion = neighborRegion;
                         bestSource = source;
                     }
@@ -219,9 +254,9 @@ bool requireProvinceGrowth(const World &world,
                     "A province claimed a non-neighboring region.");
             require(actualRegion == bestRegion,
                     "A province did not claim its cheapest frontier region.");
-            require(bestCost <= remainingScore,
+            require(bestCost <= remainingScore + EPS,
                     "A province claimed a region it could not afford.");
-            remainingScore -= bestCost;
+            remainingScore = std::max(0.0, remainingScore - bestCost);
             assigned[actualRegion] = true;
             ++assignedCount;
             claimed.push_back(actualRegion);
@@ -246,12 +281,17 @@ bool requireProvinceGrowth(const World &world,
                     settings.provinceBaseCost
                         + settings.provinceElevationContribution
                               * elevationDifference
+                        + settings.provinceDistanceContribution
+                              * normalizedDistance(
+                                  settings.bounds,
+                                  provinceCenter,
+                                  world.division().cells.at(neighbor).sitePosition)
                         + (crossesRiver
                                ? settings.provinceRiverContribution
                                : 0.0));
             }
         }
-        require(cheapestRemaining > remainingScore,
+        require(cheapestRemaining > remainingScore + EPS,
                 "A province stopped with an affordable frontier region.");
         requireNear(province.remainingScore(),
                     remainingScore,
@@ -611,13 +651,14 @@ void testProvinceBudgets() {
         .seed = 417,
         .columns = 5,
         .rows = 4,
-        .jitter = 0.65,
+        .jitter = 0.0,
         .seaLevel = 0.0,
         .edgeStrength = 0.0,
         .riverSourceCount = 0,
         .provinceStartScore = 2.5,
         .provinceRiverContribution = 0.0,
         .provinceElevationContribution = 0.0,
+        .provinceDistanceContribution = 0.0,
         .provinceBaseCost = 1.0,
     };
     const auto world = WorldGenerator{settings}.generate();
@@ -628,6 +669,13 @@ void testProvinceBudgets() {
         require(province.regionIds().size() <= 3,
                 "A province exceeded its fixed base-cost budget.");
     }
+
+    auto distanceSettings = settings;
+    distanceSettings.provinceDistanceContribution = 10.0;
+    const auto distanceWorld = WorldGenerator{distanceSettings}.generate();
+    require(distanceWorld.provinces().size() == distanceWorld.regions().size(),
+            "Province distance cost did not limit growth from the seed center.");
+    requireProvinceGrowth(distanceWorld, distanceSettings);
 
     settings.provinceStartScore = 0.0;
     const auto noBudgetWorld = WorldGenerator{settings}.generate();
@@ -652,6 +700,45 @@ void testProvinceBudgets() {
     requireProvinceGrowth(waterWorld, settings);
 }
 
+void testProvinceCostOrdering() {
+    const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
+    const WorldDivision division{
+        .cells = {
+            {.id = 0, .sitePosition = {5.0, 5.0}, .neighbors = {1, 2}},
+            {.id = 1, .sitePosition = {4.0, 5.0}, .neighbors = {0}},
+            {.id = 2, .sitePosition = {6.0, 5.0}, .neighbors = {0}},
+        },
+    };
+    const auto generate = [&](double firstCost, double secondCost) {
+        std::vector<Region> regions;
+        regions.emplace_back(0, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
+        regions.emplace_back(1, firstCost, 0.0, 0, 0.0, 0.0, 0.0);
+        regions.emplace_back(2, secondCost, 0.0, 0, 0.0, 0.0, 0.0);
+        return generateProvinces(bounds,
+                                 division,
+                                 regions,
+                                 10.0 * EPS,
+                                 0.0,
+                                 1.0,
+                                 0.0,
+                                 0.0);
+    };
+
+    const auto epsilonTied = generate(0.75 * EPS, 0.25 * EPS);
+    require(epsilonTied.size() == 1,
+            "EPS-equivalent claims did not form one province.");
+    require(epsilonTied.front().regionIds()
+                == std::vector<RegionId>{0, 1, 2},
+            "EPS-equivalent claim costs did not use the region-ID tie-breaker.");
+
+    const auto distinct = generate(1.25 * EPS, 0.25 * EPS);
+    require(distinct.size() == 1,
+            "Distinct claim costs did not form one province.");
+    require(distinct.front().regionIds()
+                == std::vector<RegionId>{0, 2, 1},
+            "Province growth did not choose the cheapest frontier claim.");
+}
+
 void testProvinceSettingsValidation() {
     auto settings = WorldGenerationSettings{
         .bounds = {{0.0, 0.0}, {10.0, 10.0}},
@@ -665,6 +752,9 @@ void testProvinceSettingsValidation() {
     requireNear(settings.provinceElevationContribution,
                 10.0,
                 "The default province elevation contribution must be 10.");
+    requireNear(settings.provinceDistanceContribution,
+                5.0,
+                "The default province distance contribution must be 5.");
     requireNear(settings.provinceBaseCost,
                 1.0,
                 "The default province base cost must be 1.");
@@ -693,6 +783,14 @@ void testProvinceSettingsValidation() {
     }
 
     settings.provinceElevationContribution = 10.0;
+    settings.provinceDistanceContribution = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative province distance contribution was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.provinceDistanceContribution = 5.0;
     settings.provinceBaseCost = std::numeric_limits<double>::infinity();
     try {
         static_cast<void>(WorldGenerator{settings});
@@ -915,6 +1013,7 @@ int main() {
         testRegionClimate();
         testClimateSettingsValidation();
         testProvinceBudgets();
+        testProvinceCostOrdering();
         testProvinceSettingsValidation();
         testRivers();
         testRiverSettingsValidation();

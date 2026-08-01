@@ -20,6 +20,7 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.province_start_score, 10.0))
     assert(is_equal_approx(settings.province_river_contribution, 5.0))
     assert(is_equal_approx(settings.province_elevation_contribution, 10.0))
+    assert(is_equal_approx(settings.province_distance_contribution, 5.0))
     assert(is_equal_approx(settings.province_base_cost, 1.0))
     assert(is_equal_approx(settings.equator_temperature, 30.0))
     assert(is_equal_approx(settings.pole_temperature, -20.0))
@@ -44,6 +45,7 @@ func _initialize() -> void:
     settings.province_start_score = 10.0
     settings.province_river_contribution = 5.0
     settings.province_elevation_contribution = 10.0
+    settings.province_distance_contribution = 5.0
     settings.province_base_cost = 1.0
 
     var generator := VoronoiWorldGenerator.new()

@@ -89,6 +89,7 @@ namespace {
         .provinceStartScore = settings.provinceStartScore(),
         .provinceRiverContribution = settings.provinceRiverContribution(),
         .provinceElevationContribution = settings.provinceElevationContribution(),
+        .provinceDistanceContribution = settings.provinceDistanceContribution(),
         .provinceBaseCost = settings.provinceBaseCost(),
     };
 }

@@ -37,6 +37,7 @@ struct WorldGenerationSettings {
     double provinceStartScore{10.0};
     double provinceRiverContribution{5.0};
     double provinceElevationContribution{10.0};
+    double provinceDistanceContribution{5.0};
     double provinceBaseCost{1.0};
 };
 

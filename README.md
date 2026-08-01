@@ -83,6 +83,7 @@ settings.river_elevation_tolerance = 0.03
 settings.province_start_score = 10.0
 settings.province_river_contribution = 5.0
 settings.province_elevation_contribution = 10.0
+settings.province_distance_contribution = 5.0
 settings.province_base_cost = 1.0
 generator.settings = settings
 
@@ -138,13 +139,18 @@ current member. Crossing from region `a` to region `b` costs:
 ```text
 province_base_cost
     + province_elevation_contribution * abs(elevation[a] - elevation[b])
+    + province_distance_contribution
+        * distance(site[b], site[seed]) / world_bounds_diagonal
     + province_river_contribution if their shared border carries a river
 ```
 
-The seed itself is free. Growth stops when the frontier is empty or its cheapest
-claim exceeds the remaining score, then the next unclaimed land region starts
-another province. Thus every land region belongs to exactly one province, while
-water regions belong to none; province indices are stable for fixed settings and
+The seed site is the stable center of its province, and the seed itself is free.
+At each step the generator selects the globally cheapest frontier transition;
+costs in the same absolute `EPS` bucket use region and source IDs as deterministic
+tie-breakers. Growth stops when the frontier is empty or its cheapest claim
+exceeds the remaining score, then the next unclaimed land region starts another
+province. Thus every land region belongs to exactly one province, while water
+regions belong to none; province indices are stable for fixed settings and
 generation seed.
 
 Province `i` owns the region IDs in

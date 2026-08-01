@@ -1,5 +1,6 @@
 #include "ProvinceGenerator.h"
 
+#include "Id.h"
 #include "NumericalPolicy.h"
 
 #include <algorithm>
@@ -21,11 +22,20 @@ struct Claim {
     RegionId fromRegion;
 };
 
+[[nodiscard]] long double quantizedCost(double cost) noexcept {
+    // EPS-sized buckets provide a transitive equivalence relation, unlike a
+    // pairwise abs(left - right) <= EPS comparison in a heap comparator.
+    return std::floor(static_cast<long double>(cost)
+                      / static_cast<long double>(EPS));
+}
+
 struct MoreExpensiveClaim {
     [[nodiscard]] bool operator()(const Claim &left,
                                   const Claim &right) const noexcept {
-        if (left.cost != right.cost)
-            return left.cost > right.cost;
+        const auto leftCost = quantizedCost(left.cost);
+        const auto rightCost = quantizedCost(right.cost);
+        if (leftCost != rightCost)
+            return leftCost > rightCost;
         if (left.region != right.region)
             return left.region > right.region;
         return left.fromRegion > right.fromRegion;
@@ -115,6 +125,21 @@ struct MoreExpensiveClaim {
                                 tolerance);
 }
 
+[[nodiscard]] double normalizedDistance(const BoundingBox &boundingBox,
+                                        Vector2d first,
+                                        Vector2d second) noexcept {
+    const auto deltaX = static_cast<long double>(first.x)
+                        - static_cast<long double>(second.x);
+    const auto deltaY = static_cast<long double>(first.y)
+                        - static_cast<long double>(second.y);
+    const auto width = static_cast<long double>(boundingBox.max.x)
+                       - static_cast<long double>(boundingBox.min.x);
+    const auto height = static_cast<long double>(boundingBox.max.y)
+                        - static_cast<long double>(boundingBox.min.y);
+    return static_cast<double>(std::hypot(deltaX, deltaY)
+                               / std::hypot(width, height));
+}
+
 [[nodiscard]] std::vector<Region *> indexRegions(
     const WorldDivision &division,
     std::span<Region> regions) {
@@ -152,6 +177,7 @@ std::vector<Province> generateProvinces(
     double startScore,
     double riverContribution,
     double elevationContribution,
+    double distanceContribution,
     double baseCost) {
     if (division.cells.empty())
         return {};
@@ -172,6 +198,7 @@ std::vector<Province> generateProvinces(
             continue;
 
         const auto seed = static_cast<RegionId>(seedIndex);
+        const auto provinceCenter = division.cells[seedIndex].sitePosition;
         const auto provinceId = static_cast<ProvinceId>(provinces.size());
         auto remainingScore = startScore;
         std::vector<RegionId> provinceRegions{seed};
@@ -203,8 +230,13 @@ std::vector<Province> generateProvinces(
                     sharedEdgeTolerance);
                 const auto elevationDifference = std::abs(
                     from.elevation() - neighbor.elevation());
+                const auto distance = normalizedDistance(
+                    boundingBox,
+                    provinceCenter,
+                    division.cells[neighborIndex].sitePosition);
                 const auto cost = baseCost
                                   + elevationContribution * elevationDifference
+                                  + distanceContribution * distance
                                   + (crossesRiver ? riverContribution : 0.0);
                 if (!std::isfinite(cost) || cost < 0.0) {
                     throw std::logic_error(
@@ -223,10 +255,10 @@ std::vector<Province> generateProvinces(
             const auto claimIndex = static_cast<std::size_t>(claim.region);
             if (assigned[claimIndex])
                 continue;
-            if (claim.cost > remainingScore)
+            if (claim.cost > remainingScore + EPS)
                 break;
 
-            remainingScore -= claim.cost;
+            remainingScore = std::max(0.0, remainingScore - claim.cost);
             assigned[claimIndex] = true;
             indexedRegions[claimIndex]->setProvinceId(provinceId);
             provinceRegions.push_back(claim.region);

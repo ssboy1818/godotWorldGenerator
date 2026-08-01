@@ -16,6 +16,7 @@ namespace worldgen {
     double startScore,
     double riverContribution,
     double elevationContribution,
+    double distanceContribution,
     double baseCost);
 
 } // namespace worldgen
