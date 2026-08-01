@@ -12,7 +12,7 @@ namespace worldgen {
 [[nodiscard]] std::vector<Province> generateProvinces(
     const BoundingBox &boundingBox,
     const WorldDivision &division,
-    std::span<const Region> regions,
+    std::span<Region> regions,
     double startScore,
     double riverContribution,
     double elevationContribution,

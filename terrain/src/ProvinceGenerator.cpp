@@ -115,20 +115,21 @@ struct MoreExpensiveClaim {
                                 tolerance);
 }
 
-[[nodiscard]] std::vector<const Region *> indexRegions(
+[[nodiscard]] std::vector<Region *> indexRegions(
     const WorldDivision &division,
-    std::span<const Region> regions) {
+    std::span<Region> regions) {
     if (regions.size() != division.cells.size()) {
         throw std::logic_error(
             "Province generation requires one region per cell.");
     }
 
-    std::vector<const Region *> indexed(regions.size(), nullptr);
-    for (const auto &region : regions) {
+    std::vector<Region *> indexed(regions.size(), nullptr);
+    for (auto &region : regions) {
         const auto id = static_cast<std::size_t>(region.id());
-        if (id >= indexed.size() || indexed[id] != nullptr) {
+        if (id >= indexed.size() || indexed[id] != nullptr
+            || region.hasProvince()) {
             throw std::logic_error(
-                "Province generation received invalid region IDs.");
+                "Province generation received invalid or already assigned regions.");
         }
         indexed[id] = &region;
     }
@@ -147,7 +148,7 @@ struct MoreExpensiveClaim {
 std::vector<Province> generateProvinces(
     const BoundingBox &boundingBox,
     const WorldDivision &division,
-    std::span<const Region> regions,
+    std::span<Region> regions,
     double startScore,
     double riverContribution,
     double elevationContribution,
@@ -169,9 +170,11 @@ std::vector<Province> generateProvinces(
             continue;
 
         const auto seed = static_cast<RegionId>(seedIndex);
+        const auto provinceId = static_cast<ProvinceId>(provinces.size());
         auto remainingScore = startScore;
         std::vector<RegionId> provinceRegions{seed};
         assigned[seedIndex] = true;
+        indexedRegions[seedIndex]->setProvinceId(provinceId);
 
         std::priority_queue<Claim,
                             std::vector<Claim>,
@@ -223,6 +226,7 @@ std::vector<Province> generateProvinces(
 
             remainingScore -= claim.cost;
             assigned[claimIndex] = true;
+            indexedRegions[claimIndex]->setProvinceId(provinceId);
             provinceRegions.push_back(claim.region);
             addFrontier(claim.region);
         }

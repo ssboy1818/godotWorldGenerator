@@ -13,6 +13,8 @@ namespace worldgen {
 
 using RegionId = std::uint32_t;
 inline constexpr auto INVALID_REGION_ID = std::numeric_limits<RegionId>::max();
+using ProvinceId = std::uint32_t;
+inline constexpr auto INVALID_PROVINCE_ID = std::numeric_limits<ProvinceId>::max();
 
 enum class RegionType {
     Water,
@@ -54,6 +56,24 @@ public:
         return m_type == RegionType::Land;
     }
 
+    [[nodiscard]] ProvinceId provinceId() const noexcept {
+        return m_provinceId;
+    }
+
+    [[nodiscard]] bool hasProvince() const noexcept {
+        return m_provinceId != INVALID_PROVINCE_ID;
+    }
+
+    void setProvinceId(ProvinceId province) {
+        if (province == INVALID_PROVINCE_ID)
+            throw std::invalid_argument("A region needs a valid province ID.");
+        if (hasProvince() && m_provinceId != province) {
+            throw std::logic_error(
+                "A region cannot belong to two provinces.");
+        }
+        m_provinceId = province;
+    }
+
     [[nodiscard]] const std::vector<RiverId> &edgeRivers() const noexcept {
         return m_edgeRivers;
     }
@@ -82,6 +102,7 @@ private:
     CellId m_cell;
     double m_elevation;
     RegionType m_type;
+    ProvinceId m_provinceId{INVALID_PROVINCE_ID};
     std::vector<RiverId> m_edgeRivers;
 };
 

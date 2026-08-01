@@ -143,6 +143,14 @@ bool requireProvinceGrowth(const World &world,
         std::vector<RegionId> claimed;
         claimed.reserve(province.regionIds().size());
         for (const auto actualRegion : province.regionIds()) {
+            require(world.regions().at(actualRegion).provinceId()
+                        == provinceIndex,
+                    "A region stores an incorrect province ID.");
+            if (repeated != nullptr) {
+                require(repeated->regions().at(actualRegion).provinceId()
+                            == provinceIndex,
+                        "Region province IDs are not deterministic.");
+            }
             if (claimed.empty()) {
                 require(actualRegion == province.seedRegion(),
                         "A province claim order does not begin with its seed.");

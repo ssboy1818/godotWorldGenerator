@@ -515,6 +515,10 @@ void VoronoiWorldData::populate(const World &world) {
                 throw std::logic_error(
                     "Generated provinces contain invalid or duplicate region IDs.");
             }
+            if (world.regions()[regionIndex].provinceId() != provinceIndex) {
+                throw std::logic_error(
+                    "A generated region references an inconsistent province ID.");
+            }
             provinceRegionIds[provinceRegionOffset++] = static_cast<std::int32_t>(
                 region);
             regionProvinceIndices[regionIndex] = static_cast<std::int32_t>(
