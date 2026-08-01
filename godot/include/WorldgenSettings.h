@@ -74,6 +74,12 @@ public:
     void setRiverElevationTolerance(double tolerance);
     [[nodiscard]] double riverElevationTolerance() const noexcept;
 
+    void setRiverHumidityCoefficient(double coefficient);
+    [[nodiscard]] double riverHumidityCoefficient() const noexcept;
+
+    void setRiverVegetationCoefficient(double coefficient);
+    [[nodiscard]] double riverVegetationCoefficient() const noexcept;
+
     void setProvinceStartScore(double score);
     [[nodiscard]] double provinceStartScore() const noexcept;
 
@@ -119,6 +125,8 @@ private:
     double m_riverMinimumSourceElevation{0.6};
     double m_riverRandomness{0.25};
     double m_riverElevationTolerance{0.03};
+    double m_riverHumidityCoefficient{0.05};
+    double m_riverVegetationCoefficient{0.05};
     double m_provinceStartScore{10.0};
     double m_provinceRiverContribution{5.0};
     double m_provinceElevationContribution{10.0};

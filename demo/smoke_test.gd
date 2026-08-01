@@ -17,6 +17,8 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.river_minimum_source_elevation, 0.6))
     assert(is_equal_approx(settings.river_randomness, 0.25))
     assert(is_equal_approx(settings.river_elevation_tolerance, 0.03))
+    assert(is_equal_approx(settings.river_humidity_coefficient, 0.05))
+    assert(is_equal_approx(settings.river_vegetation_coefficient, 0.05))
     assert(is_equal_approx(settings.province_start_score, 10.0))
     assert(is_equal_approx(settings.province_river_contribution, 5.0))
     assert(is_equal_approx(settings.province_elevation_contribution, 10.0))
@@ -44,6 +46,8 @@ func _initialize() -> void:
     settings.river_minimum_source_elevation = 0.5
     settings.river_randomness = 0.35
     settings.river_elevation_tolerance = 0.03
+    settings.river_humidity_coefficient = 0.08
+    settings.river_vegetation_coefficient = 0.04
     settings.province_start_score = 10.0
     settings.province_river_contribution = 5.0
     settings.province_elevation_contribution = 10.0
@@ -61,9 +65,10 @@ func _initialize() -> void:
     assert(world.cell_vertex_offsets.size() == world.cell_count + 1)
     assert(world.neighbor_offsets.size() == world.cell_count + 1)
     assert(world.elevations.size() == world.cell_count)
-    assert(world.temperatures.size() == world.cell_count)
-    assert(world.humidities.size() == world.cell_count)
-    assert(world.vegetations.size() == world.cell_count)
+    assert(world.region_land_indices.size() == world.cell_count)
+    assert(world.land_temperatures.size() == world.land_region_ids.size())
+    assert(world.land_humidities.size() == world.land_region_ids.size())
+    assert(world.land_vegetations.size() == world.land_region_ids.size())
     assert(world.region_types.size() == world.cell_count)
     assert(world.river_count > 0)
     assert(world.river_offsets.size() == world.river_count + 1)
@@ -81,12 +86,18 @@ func _initialize() -> void:
     assert(world.region_province_indices.size() == world.cell_count)
     assert(world.province_offsets[-1] == world.province_region_ids.size())
     for region in world.cell_count:
-        assert(world.temperatures[region] >= settings.pole_temperature)
-        assert(world.temperatures[region] <= settings.equator_temperature)
-        assert(world.humidities[region] >= 0.0)
-        assert(world.humidities[region] <= 1.0)
-        assert(world.vegetations[region] >= 0.0)
-        assert(world.vegetations[region] <= 1.0)
+        var land: int = world.region_land_indices[region]
+        if world.region_types[region] == VoronoiWorldData.REGION_TYPE_LAND:
+            assert(land >= 0 and land < world.land_region_ids.size())
+            assert(world.land_region_ids[land] == region)
+            assert(world.land_temperatures[land] >= settings.pole_temperature)
+            assert(world.land_temperatures[land] <= settings.equator_temperature)
+            assert(world.land_humidities[land] >= 0.0)
+            assert(world.land_humidities[land] <= 1.0)
+            assert(world.land_vegetations[land] >= 0.0)
+            assert(world.land_vegetations[land] <= 1.0)
+        else:
+            assert(land == -1)
     var river_region_edges := 0
     for river in world.cell_edge_rivers:
         assert(river >= -1 and river < world.river_count)
@@ -141,9 +152,11 @@ func _initialize() -> void:
     assert(repeated.sites == world.sites)
     assert(repeated.vertices == world.vertices)
     assert(repeated.elevations == world.elevations)
-    assert(repeated.temperatures == world.temperatures)
-    assert(repeated.humidities == world.humidities)
-    assert(repeated.vegetations == world.vegetations)
+    assert(repeated.land_region_ids == world.land_region_ids)
+    assert(repeated.region_land_indices == world.region_land_indices)
+    assert(repeated.land_temperatures == world.land_temperatures)
+    assert(repeated.land_humidities == world.land_humidities)
+    assert(repeated.land_vegetations == world.land_vegetations)
     assert(repeated.region_types == world.region_types)
     assert(repeated.river_vertices == world.river_vertices)
     assert(repeated.river_strengths == world.river_strengths)

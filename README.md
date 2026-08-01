@@ -80,6 +80,8 @@ settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
 settings.river_elevation_tolerance = 0.03
+settings.river_humidity_coefficient = 0.05
+settings.river_vegetation_coefficient = 0.05
 settings.province_start_score = 10.0
 settings.province_river_contribution = 5.0
 settings.province_elevation_contribution = 10.0
@@ -103,20 +105,30 @@ for cell in world.cell_count:
     var cell_neighbors := world.neighbors.slice(first_neighbor, after_last_neighbor)
 ```
 
-`sites`, `elevations`, `temperatures`, `humidities`, `vegetations`, and
-`region_types` contain one entry per cell.
+`sites`, `elevations`, `region_land_indices`, and `region_types` contain one
+entry per cell. Water regions have `-1` in `region_land_indices`. Land region
+`i` uses that value as an index into the compact `land_region_ids`,
+`land_temperatures`, `land_humidities`, and `land_vegetations` arrays;
+`land_region_ids` provides the inverse mapping back to the region/cell ID.
 `cell_vertex_offsets` and `neighbor_offsets` contain `cell_count + 1` entries, so
 cell `i` uses the half-open ranges `[offsets[i], offsets[i + 1])` in the shared
 `vertices` and `neighbors` arrays. Region type constants are available as
 `VoronoiWorldData.REGION_TYPE_WATER` and `VoronoiWorldData.REGION_TYPE_LAND`.
 
-Climate values are sampled at each cell's site position, the same position used
-for elevation. Temperature interpolates linearly from `equator_temperature` at
-the vertical center of the bounds to `pole_temperature` at both the top and
-bottom. Both temperatures must be in `[-50, 50]`, and the pole cannot be warmer
-than the equator. Humidity and vegetation use independent deterministic fBm noise
-domains derived from the world seed and the shared noise octave/frequency
-settings. Their coefficients are in `[0, 2]`; results are clamped to `[0, 1]`.
+Climate values are sampled only for land cells at their site positions, the same
+positions used for elevation. Temperature interpolates linearly from
+`equator_temperature` at the vertical center of the bounds to `pole_temperature`
+at both the top and bottom. Both temperatures must be in `[-50, 50]`, and the pole
+cannot be warmer than the equator. Humidity and vegetation use independent
+deterministic fBm noise domains derived from the world seed and the shared noise
+octave/frequency settings. Their coefficients are in `[0, 2]`; results are clamped
+to `[0, 1]`. After rivers are generated, a land region touching one or more river
+edges receives an additional humidity and vegetation contribution from its
+strongest adjoining river segment. The additions are `river strength *
+river_humidity_coefficient` and `river strength *
+river_vegetation_coefficient`, respectively, and are also clamped to `[0, 1]`.
+Both river climate coefficients are in `[0, 1]`; setting either one to zero
+disables that contribution.
 
 River `i` occupies `[river_offsets[i], river_offsets[i + 1])` in the flattened
 `river_vertices` and `river_strengths` arrays. Each source contributes unit flow;

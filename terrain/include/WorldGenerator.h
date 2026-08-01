@@ -33,6 +33,8 @@ struct WorldGenerationSettings {
     double riverMinimumSourceElevation{0.6};
     double riverRandomness{0.25};
     double riverElevationTolerance{0.03};
+    double riverHumidityCoefficient{0.05};
+    double riverVegetationCoefficient{0.05};
 
     double provinceStartScore{10.0};
     double provinceRiverContribution{5.0};

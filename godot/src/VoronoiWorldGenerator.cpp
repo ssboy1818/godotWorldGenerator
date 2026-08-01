@@ -95,6 +95,8 @@ namespace {
         .riverMinimumSourceElevation = settings.riverMinimumSourceElevation(),
         .riverRandomness = settings.riverRandomness(),
         .riverElevationTolerance = settings.riverElevationTolerance(),
+        .riverHumidityCoefficient = settings.riverHumidityCoefficient(),
+        .riverVegetationCoefficient = settings.riverVegetationCoefficient(),
         .provinceStartScore = settings.provinceStartScore(),
         .provinceRiverContribution = settings.provinceRiverContribution(),
         .provinceElevationContribution = settings.provinceElevationContribution(),

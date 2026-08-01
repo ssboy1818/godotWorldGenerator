@@ -98,6 +98,18 @@ void WorldgenSettings::_bind_methods() {
         godot::D_METHOD("get_river_elevation_tolerance"),
         &WorldgenSettings::riverElevationTolerance);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("set_river_humidity_coefficient", "coefficient"),
+        &WorldgenSettings::setRiverHumidityCoefficient);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_river_humidity_coefficient"),
+        &WorldgenSettings::riverHumidityCoefficient);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_river_vegetation_coefficient", "coefficient"),
+        &WorldgenSettings::setRiverVegetationCoefficient);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_river_vegetation_coefficient"),
+        &WorldgenSettings::riverVegetationCoefficient);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("set_province_start_score", "score"),
         &WorldgenSettings::setProvinceStartScore);
     godot::ClassDB::bind_method(
@@ -245,6 +257,18 @@ void WorldgenSettings::_bind_methods() {
                                      "0,0.25,0.001,or_greater"),
                  "set_river_elevation_tolerance",
                  "get_river_elevation_tolerance");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "river_humidity_coefficient",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.001"),
+                 "set_river_humidity_coefficient",
+                 "get_river_humidity_coefficient");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "river_vegetation_coefficient",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1,0.001"),
+                 "set_river_vegetation_coefficient",
+                 "get_river_vegetation_coefficient");
 
     ADD_GROUP("Provinces", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
@@ -447,6 +471,22 @@ void WorldgenSettings::setRiverElevationTolerance(double tolerance) {
 
 double WorldgenSettings::riverElevationTolerance() const noexcept {
     return m_riverElevationTolerance;
+}
+
+void WorldgenSettings::setRiverHumidityCoefficient(double coefficient) {
+    m_riverHumidityCoefficient = coefficient;
+}
+
+double WorldgenSettings::riverHumidityCoefficient() const noexcept {
+    return m_riverHumidityCoefficient;
+}
+
+void WorldgenSettings::setRiverVegetationCoefficient(double coefficient) {
+    m_riverVegetationCoefficient = coefficient;
+}
+
+double WorldgenSettings::riverVegetationCoefficient() const noexcept {
+    return m_riverVegetationCoefficient;
 }
 
 void WorldgenSettings::setProvinceStartScore(double score) {

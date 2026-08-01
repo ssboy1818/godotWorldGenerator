@@ -7,8 +7,10 @@
 #include "ProvinceGenerator.h"
 #include "RiverGenerator.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <utility>
 
@@ -87,6 +89,17 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument(
             "River elevation tolerance must be between zero and one.");
     }
+    const auto validRiverClimateCoefficient = [](double value) {
+        return std::isfinite(value) && value >= 0.0 && value <= 1.0;
+    };
+    if (!validRiverClimateCoefficient(settings.riverHumidityCoefficient)) {
+        throw std::invalid_argument(
+            "River humidity coefficient must be between zero and one.");
+    }
+    if (!validRiverClimateCoefficient(settings.riverVegetationCoefficient)) {
+        throw std::invalid_argument(
+            "River vegetation coefficient must be between zero and one.");
+    }
     if (!std::isfinite(settings.provinceStartScore)
         || settings.provinceStartScore < 0.0) {
         throw std::invalid_argument(
@@ -128,6 +141,49 @@ void validateSettings(const WorldGenerationSettings &settings) {
     if (settings.provinceMinimumRegionCount == 0) {
         throw std::invalid_argument(
             "The minimum province region count must be positive.");
+    }
+}
+
+void applyRiverClimateInfluence(
+    std::span<const Region> regions,
+    std::span<climate::ClimateSample> landClimates,
+    std::span<const River> rivers,
+    double humidityCoefficient,
+    double vegetationCoefficient) {
+    if (humidityCoefficient == 0.0 && vegetationCoefficient == 0.0)
+        return;
+
+    for (const auto &region : regions) {
+        if (!region.isLand())
+            continue;
+
+        auto strongestRiver = 0.0;
+        for (const auto riverId : region.edgeRivers()) {
+            if (riverId == INVALID_RIVER_ID)
+                continue;
+            if (riverId >= rivers.size() || rivers[riverId].nodes.empty()) {
+                throw std::logic_error(
+                    "A region references an invalid river segment.");
+            }
+            strongestRiver = std::max(strongestRiver,
+                                      rivers[riverId].nodes.front().strength);
+        }
+        if (strongestRiver == 0.0)
+            continue;
+
+        if (region.landClimateId() >= landClimates.size()) {
+            throw std::logic_error(
+                "A land region references an invalid climate sample.");
+        }
+        auto &sample = landClimates[region.landClimateId()];
+        sample.humidity = std::clamp(
+            sample.humidity + strongestRiver * humidityCoefficient,
+            0.0,
+            1.0);
+        sample.vegetation = std::clamp(
+            sample.vegetation + strongestRiver * vegetationCoefficient,
+            0.0,
+            1.0);
     }
 }
 
@@ -174,6 +230,7 @@ World WorldGenerator::generate() const {
 
     std::vector<Region> regions;
     regions.reserve(division.cells.size());
+    std::vector<climate::ClimateSample> landClimates;
     std::vector<CellId> riverCandidateCells;
     riverCandidateCells.reserve(division.cells.size());
     for (const auto &cell : division.cells) {
@@ -188,14 +245,20 @@ World WorldGenerator::generate() const {
                                                  cell.sitePosition);
         const auto effectiveSeaLevel = m_settings.seaLevel
                                        + edgeAmount * m_settings.edgeStrength;
-        const auto climate = climateGenerator.sample(cell.sitePosition);
+        auto landClimateId = INVALID_LAND_CLIMATE_ID;
+        if (elevation >= effectiveSeaLevel) {
+            if (landClimates.size() >= INVALID_LAND_CLIMATE_ID) {
+                throw std::length_error(
+                    "The generated world has too many land climate samples.");
+            }
+            landClimateId = static_cast<LandClimateId>(landClimates.size());
+            landClimates.push_back(climateGenerator.sample(cell.sitePosition));
+        }
         regions.emplace_back(cell.id,
                              elevation,
                              effectiveSeaLevel,
                              cell.vertices.size(),
-                             climate.temperature,
-                             climate.humidity,
-                             climate.vegetation);
+                             landClimateId);
         if (regions.back().isLand()
             && elevation >= m_settings.riverMinimumSourceElevation) {
             riverCandidateCells.push_back(cell.id);
@@ -210,6 +273,12 @@ World WorldGenerator::generate() const {
                                  m_settings.riverSourceCount,
                                  m_settings.riverRandomness,
                                  m_settings.riverElevationTolerance);
+
+    applyRiverClimateInfluence(regions,
+                               landClimates,
+                               rivers,
+                               m_settings.riverHumidityCoefficient,
+                               m_settings.riverVegetationCoefficient);
 
     auto provinces = generateProvinces(
         boundingBox,
@@ -226,6 +295,7 @@ World WorldGenerator::generate() const {
     return World{boundingBox,
                  std::move(division),
                  std::move(regions),
+                 std::move(landClimates),
                  std::move(rivers),
                  std::move(provinces)};
 }

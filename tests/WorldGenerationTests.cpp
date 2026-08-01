@@ -567,33 +567,50 @@ void testRegionClimate() {
         .noisePersistence = settings.noisePersistence,
     }};
 
+    require(world.landClimates().size() == repeated.landClimates().size(),
+            "Repeated generation changed the land climate count.");
+    std::size_t expectedLandClimate = 0;
+    auto waterRegionCount = std::size_t{0};
     for (const auto &region : world.regions()) {
+        const auto &repeatedRegion = repeated.regions().at(region.id());
+        require(repeatedRegion.landClimateId() == region.landClimateId(),
+                "Region-to-land-climate mapping is not deterministic.");
+        if (region.isWater()) {
+            require(!region.hasLandClimate()
+                        && region.landClimateId() == INVALID_LAND_CLIMATE_ID,
+                    "A water region references a land climate sample.");
+            ++waterRegionCount;
+            continue;
+        }
+
+        require(region.hasLandClimate(),
+                "A land region does not reference a climate sample.");
+        require(region.landClimateId() == expectedLandClimate,
+                "Land climate IDs are not compact and ordered by region ID.");
         const auto &cell = world.division().cells.at(region.cell());
         const auto expected = climateGenerator.sample(cell.sitePosition);
-        requireNear(region.temperature(),
+        const auto &actual = world.landClimates().at(region.landClimateId());
+        const auto &repeatedClimate = repeated.landClimates().at(
+            repeatedRegion.landClimateId());
+        requireNear(actual.temperature,
                     expected.temperature,
-                    "A region stores an incorrect temperature.");
-        requireNear(region.humidity(),
+                    "A land climate stores an incorrect temperature.");
+        requireNear(actual.humidity,
                     expected.humidity,
-                    "A region stores incorrect humidity.");
-        requireNear(region.vegetation(),
+                    "A land climate stores incorrect humidity.");
+        requireNear(actual.vegetation,
                     expected.vegetation,
-                    "A region stores incorrect vegetation.");
-        require(region.temperature()
-                    == repeated.regions().at(region.id()).temperature()
-                    && region.humidity()
-                           == repeated.regions().at(region.id()).humidity()
-                    && region.vegetation()
-                           == repeated.regions().at(region.id()).vegetation(),
-                "Region climate values are not deterministic.");
+                    "A land climate stores incorrect vegetation.");
+        require(actual.temperature == repeatedClimate.temperature
+                    && actual.humidity == repeatedClimate.humidity
+                    && actual.vegetation == repeatedClimate.vegetation,
+                "Land climate values are not deterministic.");
+        ++expectedLandClimate;
     }
-
-    requireNear(world.regions().at(0).temperature(),
-                world.regions().at(12).temperature(),
-                "Top and bottom temperatures are not symmetric.");
-    require(world.regions().at(4).temperature()
-                > world.regions().at(0).temperature(),
-            "Regions do not become warmer toward the equator.");
+    require(expectedLandClimate == world.landClimates().size(),
+            "The land climate array is not dense.");
+    require(expectedLandClimate > 0 && waterRegionCount > 0,
+            "The compact climate fixture needs both land and water regions.");
 }
 
 void testClimateSettingsValidation() {
@@ -713,9 +730,9 @@ void testProvinceCostOrdering() {
     };
     const auto generate = [&](double firstCost, double secondCost) {
         std::vector<Region> regions;
-        regions.emplace_back(0, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
-        regions.emplace_back(1, firstCost, 0.0, 0, 0.0, 0.0, 0.0);
-        regions.emplace_back(2, secondCost, 0.0, 0, 0.0, 0.0, 0.0);
+        regions.emplace_back(0, 0.0, 0.0, 0, 0);
+        regions.emplace_back(1, firstCost, 0.0, 0, 1);
+        regions.emplace_back(2, secondCost, 0.0, 0, 2);
         return generateProvinces(bounds,
                                  division,
                                  regions,
@@ -783,9 +800,7 @@ void testProvinceShortBorderPenalty() {
                                  0.0,
                                  0.0,
                                  division.cells[cell].vertices.size(),
-                                 0.0,
-                                 0.0,
-                                 0.0);
+                                 static_cast<LandClimateId>(cell));
         }
         return generateProvinces(bounds,
                                  division,
@@ -833,9 +848,7 @@ void testSmallProvinceMerging() {
                                   elevation,
                                   0.0,
                                   0,
-                                  0.0,
-                                  0.0,
-                                  0.0);
+                                  static_cast<LandClimateId>(cell));
     }
 
     const auto splitProvinces = generateProvinces(bounds,
@@ -874,7 +887,7 @@ void testSmallProvinceMerging() {
     };
     std::vector<Region> allSmallRegions;
     for (CellId cell = 0; cell < allSmallDivision.cells.size(); ++cell)
-        allSmallRegions.emplace_back(cell, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
+        allSmallRegions.emplace_back(cell, 0.0, 0.0, 0, cell);
     const auto combined = generateProvinces(bounds,
                                             allSmallDivision,
                                             allSmallRegions,
@@ -903,8 +916,8 @@ void testSmallProvinceMerging() {
         },
     };
     std::vector<Region> isolatedRegions;
-    isolatedRegions.emplace_back(0, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
-    isolatedRegions.emplace_back(1, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
+    isolatedRegions.emplace_back(0, 0.0, 0.0, 0, 0);
+    isolatedRegions.emplace_back(1, 0.0, 0.0, 0, 1);
     const auto isolated = generateProvinces(bounds,
                                             isolatedDivision,
                                             isolatedRegions,
@@ -930,10 +943,10 @@ void testCoastalSmallProvinceMerging() {
         },
     };
     std::vector<Region> regions;
-    regions.emplace_back(0, 1.0, 0.0, 0, 0.0, 0.0, 0.0);
-    regions.emplace_back(1, 1.0, 0.0, 0, 0.0, 0.0, 0.0);
-    regions.emplace_back(2, 1.0, 0.0, 0, 0.0, 0.0, 0.0);
-    regions.emplace_back(3, 0.0, 1.0, 0, 0.0, 0.0, 0.0);
+    regions.emplace_back(0, 1.0, 0.0, 0, 0);
+    regions.emplace_back(1, 1.0, 0.0, 0, 1);
+    regions.emplace_back(2, 1.0, 0.0, 0, 2);
+    regions.emplace_back(3, 0.0, 1.0, 0, INVALID_LAND_CLIMATE_ID);
 
     const auto provinces = generateProvinces(bounds,
                                              division,
@@ -1055,10 +1068,14 @@ void testRivers() {
         .noiseFrequency = 0.01,
         .noiseLacunarity = 2.0,
         .noisePersistence = 0.5,
+        .vegetationCoefficient = 0.0,
+        .humidityCoefficient = 0.0,
         .riverSourceCount = 24,
         .riverMinimumSourceElevation = 0.5,
         .riverRandomness = 0.35,
         .riverElevationTolerance = 0.03,
+        .riverHumidityCoefficient = 0.08,
+        .riverVegetationCoefficient = 0.04,
         .provinceShortBorderContribution = 0.0,
         .provinceMinimumRegionCount = 1,
     };
@@ -1201,12 +1218,73 @@ void testRivers() {
     require(hasToleratedRise,
             "The river fixture did not exercise the elevation tolerance.");
 
+    const climate::ClimateGenerator climateGenerator{{
+        .bounds = settings.bounds,
+        .seed = settings.seed,
+        .equatorTemperature = settings.equatorTemperature,
+        .poleTemperature = settings.poleTemperature,
+        .vegetationCoefficient = settings.vegetationCoefficient,
+        .humidityCoefficient = settings.humidityCoefficient,
+        .noiseOctaves = settings.noiseOctaves,
+        .noiseFrequency = settings.noiseFrequency,
+        .noiseLacunarity = settings.noiseLacunarity,
+        .noisePersistence = settings.noisePersistence,
+    }};
+    auto riverClimateRegionCount = std::size_t{0};
+    auto dryLandRegionCount = std::size_t{0};
     for (const auto &region : world.regions()) {
         for (const auto river : region.edgeRivers()) {
             require(river == INVALID_RIVER_ID || river < world.rivers().size(),
                     "A region edge references an invalid river segment.");
         }
+        if (!region.isLand())
+            continue;
+
+        auto strongestRiver = 0.0;
+        for (const auto river : region.edgeRivers()) {
+            if (river == INVALID_RIVER_ID)
+                continue;
+            strongestRiver = std::max(
+                strongestRiver,
+                world.rivers().at(river).nodes.front().strength);
+        }
+
+        const auto base = climateGenerator.sample(
+            world.division().cells.at(region.cell()).sitePosition);
+        const auto &actual = world.landClimates().at(region.landClimateId());
+        requireNear(actual.temperature,
+                    base.temperature,
+                    "A river changed land temperature.");
+        requireNear(actual.humidity,
+                    std::clamp(base.humidity
+                                   + strongestRiver
+                                         * settings.riverHumidityCoefficient,
+                               0.0,
+                               1.0),
+                    "River strength did not produce the expected humidity boost.");
+        requireNear(actual.vegetation,
+                    std::clamp(base.vegetation
+                                   + strongestRiver
+                                         * settings.riverVegetationCoefficient,
+                               0.0,
+                               1.0),
+                    "River strength did not produce the expected vegetation boost.");
+
+        const auto &repeatedClimate = repeated.landClimates().at(
+            repeated.regions().at(region.id()).landClimateId());
+        require(actual.temperature == repeatedClimate.temperature
+                    && actual.humidity == repeatedClimate.humidity
+                    && actual.vegetation == repeatedClimate.vegetation,
+                "River climate influence is not deterministic.");
+        if (strongestRiver > 0.0)
+            ++riverClimateRegionCount;
+        else
+            ++dryLandRegionCount;
     }
+    require(riverClimateRegionCount > 0,
+            "The river fixture did not boost any land-region climate.");
+    require(dryLandRegionCount > 0,
+            "The river fixture has no land region away from a river.");
 
     require(requireProvinceGrowth(world, settings, &repeated),
             "The province fixture did not exercise a river frontier cost.");
@@ -1215,12 +1293,34 @@ void testRivers() {
     disabledSettings.riverSourceCount = 0;
     require(WorldGenerator{disabledSettings}.generate().rivers().empty(),
             "A zero river count did not disable river generation.");
+
+    auto disabledClimateSettings = settings;
+    disabledClimateSettings.riverHumidityCoefficient = 0.0;
+    disabledClimateSettings.riverVegetationCoefficient = 0.0;
+    const auto disabledClimateWorld = WorldGenerator{
+        disabledClimateSettings}.generate();
+    require(!disabledClimateWorld.rivers().empty(),
+            "The zero-coefficient fixture did not retain its rivers.");
+    for (const auto &sample : disabledClimateWorld.landClimates()) {
+        requireNear(sample.humidity,
+                    0.0,
+                    "Zero did not disable river humidity influence.");
+        requireNear(sample.vegetation,
+                    0.0,
+                    "Zero did not disable river vegetation influence.");
+    }
 }
 
 void testRiverSettingsValidation() {
     auto settings = WorldGenerationSettings{
         .bounds = {{0.0, 0.0}, {10.0, 10.0}},
     };
+    requireNear(settings.riverHumidityCoefficient,
+                0.05,
+                "The default river humidity coefficient must be 0.05.");
+    requireNear(settings.riverVegetationCoefficient,
+                0.05,
+                "The default river vegetation coefficient must be 0.05.");
 
     settings.riverMinimumSourceElevation = -0.01;
     try {
@@ -1242,6 +1342,22 @@ void testRiverSettingsValidation() {
     try {
         static_cast<void>(WorldGenerator{settings});
         require(false, "A negative river elevation tolerance was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.riverElevationTolerance = 0.03;
+    settings.riverHumidityCoefficient = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative river humidity coefficient was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.riverHumidityCoefficient = 0.05;
+    settings.riverVegetationCoefficient = 1.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A river vegetation coefficient above one was accepted.");
     } catch (const std::invalid_argument &) {
     }
 }
