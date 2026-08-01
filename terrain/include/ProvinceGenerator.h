@@ -4,6 +4,7 @@
 #include "Province.h"
 #include "WorldDivision.h"
 
+#include <cstddef>
 #include <span>
 #include <vector>
 
@@ -17,6 +18,7 @@ namespace worldgen {
     double riverContribution,
     double elevationContribution,
     double distanceContribution,
-    double baseCost);
+    double baseCost,
+    std::size_t minimumRegionCount = 3);
 
 } // namespace worldgen

@@ -660,6 +660,7 @@ void testProvinceBudgets() {
         .provinceElevationContribution = 0.0,
         .provinceDistanceContribution = 0.0,
         .provinceBaseCost = 1.0,
+        .provinceMinimumRegionCount = 1,
     };
     const auto world = WorldGenerator{settings}.generate();
     const auto repeated = WorldGenerator{settings}.generate();
@@ -721,7 +722,8 @@ void testProvinceCostOrdering() {
                                  0.0,
                                  1.0,
                                  0.0,
-                                 0.0);
+                                 0.0,
+                                 1);
     };
 
     const auto epsilonTied = generate(0.75 * EPS, 0.25 * EPS);
@@ -737,6 +739,110 @@ void testProvinceCostOrdering() {
     require(distinct.front().regionIds()
                 == std::vector<RegionId>{0, 2, 1},
             "Province growth did not choose the cheapest frontier claim.");
+}
+
+void testSmallProvinceMerging() {
+    const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
+    const WorldDivision splitDivision{
+        .cells = {
+            {.id = 0, .sitePosition = {0.0, 0.0}, .neighbors = {1}},
+            {.id = 1, .sitePosition = {1.0, 0.0}, .neighbors = {0, 2}},
+            {.id = 2, .sitePosition = {2.0, 0.0}, .neighbors = {1, 3}},
+            {.id = 3, .sitePosition = {3.0, 0.0}, .neighbors = {2, 4}},
+            {.id = 4, .sitePosition = {4.0, 0.0}, .neighbors = {3, 5}},
+            {.id = 5, .sitePosition = {5.0, 0.0}, .neighbors = {4, 6}},
+            {.id = 6, .sitePosition = {6.0, 0.0}, .neighbors = {5, 7}},
+            {.id = 7, .sitePosition = {7.0, 0.0}, .neighbors = {6}},
+        },
+    };
+    std::vector<Region> splitRegions;
+    for (CellId cell = 0; cell < splitDivision.cells.size(); ++cell) {
+        const auto elevation = cell >= 5 ? 1.0 : 0.0;
+        splitRegions.emplace_back(cell,
+                                  elevation,
+                                  0.0,
+                                  0,
+                                  0.0,
+                                  0.0,
+                                  0.0);
+    }
+
+    const auto splitProvinces = generateProvinces(bounds,
+                                                  splitDivision,
+                                                  splitRegions,
+                                                  2.0,
+                                                  0.0,
+                                                  3.0,
+                                                  0.0,
+                                                  1.0,
+                                                  3);
+    require(splitProvinces.size() == 2,
+            "An undersized province with neighbors was not deleted.");
+    require(splitProvinces[0].regionIds()
+                == std::vector<RegionId>{0, 1, 2, 3},
+            "A small-province region did not join its neighboring province.");
+    require(splitProvinces[1].regionIds()
+                == std::vector<RegionId>{5, 6, 7, 4},
+            "Small-province regions were not reassigned independently.");
+    for (RegionId region = 0; region < splitRegions.size(); ++region) {
+        const auto expectedProvince = region >= 4 ? ProvinceId{1}
+                                                  : ProvinceId{0};
+        require(splitRegions[region].provinceId() == expectedProvince,
+                "A merged region retained its deleted province ID.");
+    }
+
+    const WorldDivision allSmallDivision{
+        .cells = {
+            {.id = 0, .sitePosition = {0.0, 0.0}, .neighbors = {1}},
+            {.id = 1, .sitePosition = {1.0, 0.0}, .neighbors = {0, 2}},
+            {.id = 2, .sitePosition = {2.0, 0.0}, .neighbors = {1, 3}},
+            {.id = 3, .sitePosition = {3.0, 0.0}, .neighbors = {2, 4}},
+            {.id = 4, .sitePosition = {4.0, 0.0}, .neighbors = {3}},
+        },
+    };
+    std::vector<Region> allSmallRegions;
+    for (CellId cell = 0; cell < allSmallDivision.cells.size(); ++cell)
+        allSmallRegions.emplace_back(cell, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
+    const auto combined = generateProvinces(bounds,
+                                            allSmallDivision,
+                                            allSmallRegions,
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                            1.0,
+                                            3);
+    require(combined.size() == 1,
+            "A connected group of small provinces did not retain one target.");
+    require(combined.front().regionIds()
+                == std::vector<RegionId>{0, 1, 2, 3, 4},
+            "Small provinces without a large neighbor were not combined deterministically.");
+    require(std::ranges::all_of(allSmallRegions,
+                                [](const Region &region) {
+                                    return region.provinceId() == 0;
+                                }),
+            "Combined small provinces did not update every region owner.");
+
+    const WorldDivision isolatedDivision{
+        .cells = {
+            {.id = 0, .sitePosition = {0.0, 0.0}, .neighbors = {1}},
+            {.id = 1, .sitePosition = {1.0, 0.0}, .neighbors = {0}},
+        },
+    };
+    std::vector<Region> isolatedRegions;
+    isolatedRegions.emplace_back(0, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
+    isolatedRegions.emplace_back(1, 0.0, 0.0, 0, 0.0, 0.0, 0.0);
+    const auto isolated = generateProvinces(bounds,
+                                            isolatedDivision,
+                                            isolatedRegions,
+                                            1.0,
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                            1.0,
+                                            3);
+    require(isolated.size() == 1 && isolated.front().regionIds().size() == 2,
+            "An undersized province without another province was deleted.");
 }
 
 void testProvinceSettingsValidation() {
@@ -758,6 +864,8 @@ void testProvinceSettingsValidation() {
     requireNear(settings.provinceBaseCost,
                 1.0,
                 "The default province base cost must be 1.");
+    require(settings.provinceMinimumRegionCount == 3,
+            "The default minimum province region count must be 3.");
 
     settings.provinceStartScore = -0.01;
     try {
@@ -797,6 +905,14 @@ void testProvinceSettingsValidation() {
         require(false, "A non-finite province base cost was accepted.");
     } catch (const std::invalid_argument &) {
     }
+
+    settings.provinceBaseCost = 1.0;
+    settings.provinceMinimumRegionCount = 0;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A zero minimum province region count was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
 }
 
 void testRivers() {
@@ -817,6 +933,7 @@ void testRivers() {
         .riverMinimumSourceElevation = 0.5,
         .riverRandomness = 0.35,
         .riverElevationTolerance = 0.03,
+        .provinceMinimumRegionCount = 1,
     };
     const auto world = WorldGenerator{settings}.generate();
     const auto repeated = WorldGenerator{settings}.generate();
@@ -1014,6 +1131,7 @@ int main() {
         testClimateSettingsValidation();
         testProvinceBudgets();
         testProvinceCostOrdering();
+        testSmallProvinceMerging();
         testProvinceSettingsValidation();
         testRivers();
         testRiverSettingsValidation();

@@ -51,6 +51,15 @@ namespace {
         throw std::invalid_argument("River source count exceeds the native size range.");
     }
 
+    const auto provinceMinimumRegionCount =
+        settings.provinceMinimumRegionCount();
+    if (provinceMinimumRegionCount <= 0
+        || static_cast<std::uint64_t>(provinceMinimumRegionCount)
+               > std::numeric_limits<std::size_t>::max()) {
+        throw std::invalid_argument(
+            "Minimum province region count must fit in a positive native size.");
+    }
+
     const auto bounds = settings.bounds();
     const Vector2d minimum{
         static_cast<double>(bounds.position.x),
@@ -91,6 +100,8 @@ namespace {
         .provinceElevationContribution = settings.provinceElevationContribution(),
         .provinceDistanceContribution = settings.provinceDistanceContribution(),
         .provinceBaseCost = settings.provinceBaseCost(),
+        .provinceMinimumRegionCount =
+            static_cast<std::size_t>(provinceMinimumRegionCount),
     };
 }
 

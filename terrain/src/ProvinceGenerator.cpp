@@ -168,6 +168,259 @@ struct MoreExpensiveClaim {
     return indexed;
 }
 
+[[nodiscard]] std::vector<Province> mergeSmallProvinces(
+    const WorldDivision &division,
+    const std::vector<Region *> &regions,
+    std::vector<Province> provinces,
+    std::size_t minimumRegionCount) {
+    if (minimumRegionCount <= 1 || provinces.size() <= 1)
+        return provinces;
+
+    std::vector<std::vector<RegionId>> regionNeighbors(regions.size());
+    for (std::size_t region = 0; region < division.cells.size(); ++region) {
+        for (const auto neighbor : division.cells[region].neighbors) {
+            const auto neighborIndex = static_cast<std::size_t>(neighbor);
+            if (neighborIndex >= regions.size()) {
+                throw std::logic_error(
+                    "Province merging received an invalid cell neighbor.");
+            }
+            if (neighborIndex == region)
+                continue;
+            regionNeighbors[region].push_back(neighbor);
+            regionNeighbors[neighborIndex].push_back(
+                static_cast<RegionId>(region));
+        }
+    }
+    for (auto &neighbors : regionNeighbors) {
+        std::ranges::sort(neighbors);
+        const auto afterUnique = std::ranges::unique(neighbors).begin();
+        neighbors.erase(afterUnique, neighbors.end());
+    }
+
+    std::vector<ProvinceId> originalOwners(regions.size(),
+                                           INVALID_PROVINCE_ID);
+    for (std::size_t provinceIndex = 0;
+         provinceIndex < provinces.size();
+         ++provinceIndex) {
+        if (provinceIndex >= INVALID_PROVINCE_ID) {
+            throw std::logic_error(
+                "Province generation exceeded the province ID range.");
+        }
+        const auto provinceId = static_cast<ProvinceId>(provinceIndex);
+        for (const auto regionId : provinces[provinceIndex].regionIds()) {
+            const auto regionIndex = static_cast<std::size_t>(regionId);
+            if (regionIndex >= regions.size()
+                || regions[regionIndex]->isWater()
+                || originalOwners[regionIndex] != INVALID_PROVINCE_ID
+                || regions[regionIndex]->provinceId() != provinceId) {
+                throw std::logic_error(
+                    "Province merging received inconsistent province membership.");
+            }
+            originalOwners[regionIndex] = provinceId;
+        }
+    }
+    for (std::size_t region = 0; region < regions.size(); ++region) {
+        if (regions[region]->isLand()
+            != (originalOwners[region] != INVALID_PROVINCE_ID)) {
+            throw std::logic_error(
+                "Province merging requires exactly one owner per land region.");
+        }
+    }
+
+    std::vector<std::vector<ProvinceId>> provinceNeighbors(provinces.size());
+    for (std::size_t region = 0; region < regions.size(); ++region) {
+        const auto owner = originalOwners[region];
+        if (owner == INVALID_PROVINCE_ID)
+            continue;
+        for (const auto neighbor : regionNeighbors[region]) {
+            const auto neighborOwner = originalOwners[neighbor];
+            if (neighborOwner == INVALID_PROVINCE_ID || neighborOwner == owner)
+                continue;
+            provinceNeighbors[owner].push_back(neighborOwner);
+        }
+    }
+    for (auto &neighbors : provinceNeighbors) {
+        std::ranges::sort(neighbors);
+        const auto afterUnique = std::ranges::unique(neighbors).begin();
+        neighbors.erase(afterUnique, neighbors.end());
+    }
+
+    std::vector<bool> small(provinces.size(), false);
+    std::vector<bool> removed(provinces.size(), false);
+    for (std::size_t province = 0; province < provinces.size(); ++province) {
+        small[province] = provinces[province].regionIds().size()
+                          < minimumRegionCount;
+        removed[province] = small[province];
+    }
+
+    // Every connected group of small provinces needs a surviving destination.
+    // A group touching a large province can be absorbed entirely. Otherwise its
+    // largest member (then lowest ID) remains as the deterministic anchor.
+    std::vector<bool> visited(provinces.size(), false);
+    for (std::size_t first = 0; first < provinces.size(); ++first) {
+        if (!small[first] || visited[first])
+            continue;
+
+        std::vector<ProvinceId> component;
+        std::vector<ProvinceId> pending{static_cast<ProvinceId>(first)};
+        visited[first] = true;
+        auto touchesLargeProvince = false;
+        while (!pending.empty()) {
+            const auto province = pending.back();
+            pending.pop_back();
+            component.push_back(province);
+            for (const auto neighbor : provinceNeighbors[province]) {
+                if (!small[neighbor]) {
+                    touchesLargeProvince = true;
+                    continue;
+                }
+                if (!visited[neighbor]) {
+                    visited[neighbor] = true;
+                    pending.push_back(neighbor);
+                }
+            }
+        }
+
+        if (touchesLargeProvince)
+            continue;
+
+        const auto anchor = *std::ranges::min_element(
+            component,
+            [&](ProvinceId left, ProvinceId right) {
+                const auto leftSize = provinces[left].regionIds().size();
+                const auto rightSize = provinces[right].regionIds().size();
+                if (leftSize != rightSize)
+                    return leftSize > rightSize;
+                return left < right;
+            });
+        removed[anchor] = false;
+    }
+
+    if (std::ranges::none_of(removed, [](bool value) { return value; }))
+        return provinces;
+
+    std::vector<ProvinceId> finalOwners(regions.size(), INVALID_PROVINCE_ID);
+    auto unassignedCount = std::size_t{0};
+    for (std::size_t region = 0; region < regions.size(); ++region) {
+        const auto owner = originalOwners[region];
+        if (owner == INVALID_PROVINCE_ID)
+            continue;
+        if (removed[owner]) {
+            ++unassignedCount;
+        } else {
+            finalOwners[region] = owner;
+        }
+    }
+
+    std::vector<std::vector<RegionId>> absorbedRegions(provinces.size());
+    std::vector<RegionId> frontier;
+    for (std::size_t region = 0; region < regions.size(); ++region) {
+        if (originalOwners[region] == INVALID_PROVINCE_ID
+            || finalOwners[region] != INVALID_PROVINCE_ID) {
+            continue;
+        }
+        if (std::ranges::any_of(regionNeighbors[region],
+                                [&](RegionId neighbor) {
+                                    return finalOwners[neighbor]
+                                           != INVALID_PROVINCE_ID;
+                                })) {
+            frontier.push_back(static_cast<RegionId>(region));
+        }
+    }
+
+    while (unassignedCount > 0) {
+        std::ranges::sort(frontier);
+        const auto afterUnique = std::ranges::unique(frontier).begin();
+        frontier.erase(afterUnique, frontier.end());
+        if (frontier.empty()) {
+            throw std::logic_error(
+                "A small province could not reach a neighboring province.");
+        }
+
+        std::vector<std::pair<RegionId, ProvinceId>> assignments;
+        assignments.reserve(frontier.size());
+        for (const auto region : frontier) {
+            if (finalOwners[region] != INVALID_PROVINCE_ID)
+                continue;
+
+            std::vector<ProvinceId> candidates;
+            for (const auto neighbor : regionNeighbors[region]) {
+                if (finalOwners[neighbor] != INVALID_PROVINCE_ID)
+                    candidates.push_back(finalOwners[neighbor]);
+            }
+            if (candidates.empty())
+                continue;
+
+            std::ranges::sort(candidates);
+            auto selected = candidates.front();
+            auto selectedCount = std::size_t{0};
+            for (std::size_t first = 0; first < candidates.size();) {
+                auto after = first + 1;
+                while (after < candidates.size()
+                       && candidates[after] == candidates[first]) {
+                    ++after;
+                }
+                const auto count = after - first;
+                if (count > selectedCount) {
+                    selected = candidates[first];
+                    selectedCount = count;
+                }
+                first = after;
+            }
+            assignments.emplace_back(region, selected);
+        }
+
+        frontier.clear();
+        for (const auto &[region, province] : assignments) {
+            finalOwners[region] = province;
+            absorbedRegions[province].push_back(region);
+        }
+        for (const auto &assignment : assignments) {
+            const auto region = assignment.first;
+            for (const auto neighbor : regionNeighbors[region]) {
+                if (finalOwners[neighbor] == INVALID_PROVINCE_ID)
+                    frontier.push_back(neighbor);
+            }
+        }
+        unassignedCount -= assignments.size();
+    }
+
+    std::vector<ProvinceId> compactedIds(provinces.size(),
+                                         INVALID_PROVINCE_ID);
+    std::vector<Province> merged;
+    merged.reserve(provinces.size());
+    for (std::size_t oldId = 0; oldId < provinces.size(); ++oldId) {
+        if (removed[oldId])
+            continue;
+        if (merged.size() >= INVALID_PROVINCE_ID) {
+            throw std::logic_error(
+                "Province generation exceeded the province ID range.");
+        }
+        compactedIds[oldId] = static_cast<ProvinceId>(merged.size());
+        auto regionIds = provinces[oldId].regionIds();
+        regionIds.insert(regionIds.end(),
+                         absorbedRegions[oldId].begin(),
+                         absorbedRegions[oldId].end());
+        merged.emplace_back(provinces[oldId].seedRegion(),
+                            std::move(regionIds),
+                            provinces[oldId].remainingScore());
+    }
+
+    for (std::size_t region = 0; region < regions.size(); ++region) {
+        const auto oldOwner = originalOwners[region];
+        if (oldOwner == INVALID_PROVINCE_ID)
+            continue;
+        const auto replacement = compactedIds[finalOwners[region]];
+        if (replacement == INVALID_PROVINCE_ID) {
+            throw std::logic_error(
+                "Province merging produced an invalid compacted province ID.");
+        }
+        regions[region]->reassignProvinceId(oldOwner, replacement);
+    }
+
+    return merged;
+}
+
 } // namespace
 
 std::vector<Province> generateProvinces(
@@ -178,7 +431,12 @@ std::vector<Province> generateProvinces(
     double riverContribution,
     double elevationContribution,
     double distanceContribution,
-    double baseCost) {
+    double baseCost,
+    std::size_t minimumRegionCount) {
+    if (minimumRegionCount == 0) {
+        throw std::invalid_argument(
+            "The minimum province region count must be positive.");
+    }
     if (division.cells.empty())
         return {};
 
@@ -269,6 +527,11 @@ std::vector<Province> generateProvinces(
                                std::move(provinceRegions),
                                remainingScore);
     }
+
+    provinces = mergeSmallProvinces(division,
+                                    indexedRegions,
+                                    std::move(provinces),
+                                    minimumRegionCount);
 
     for (const auto *region : indexedRegions) {
         if (region->isLand() != region->hasProvince()) {

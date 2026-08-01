@@ -89,6 +89,9 @@ public:
     void setProvinceBaseCost(double cost);
     [[nodiscard]] double provinceBaseCost() const noexcept;
 
+    void setProvinceMinimumRegionCount(std::int64_t count);
+    [[nodiscard]] std::int64_t provinceMinimumRegionCount() const noexcept;
+
 protected:
     static void _bind_methods();
 
@@ -118,6 +121,7 @@ private:
     double m_provinceElevationContribution{10.0};
     double m_provinceDistanceContribution{5.0};
     double m_provinceBaseCost{1.0};
+    std::int64_t m_provinceMinimumRegionCount{3};
 };
 
 } // namespace worldgen

@@ -119,6 +119,10 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument(
             "The maximum province claim cost must be finite.");
     }
+    if (settings.provinceMinimumRegionCount == 0) {
+        throw std::invalid_argument(
+            "The minimum province region count must be positive.");
+    }
 }
 
 } // namespace
@@ -209,7 +213,8 @@ World WorldGenerator::generate() const {
         m_settings.provinceRiverContribution,
         m_settings.provinceElevationContribution,
         m_settings.provinceDistanceContribution,
-        m_settings.provinceBaseCost);
+        m_settings.provinceBaseCost,
+        m_settings.provinceMinimumRegionCount);
 
     return World{boundingBox,
                  std::move(division),

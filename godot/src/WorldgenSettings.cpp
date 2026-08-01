@@ -127,6 +127,12 @@ void WorldgenSettings::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("get_province_base_cost"),
         &WorldgenSettings::provinceBaseCost);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_minimum_region_count", "count"),
+        &WorldgenSettings::setProvinceMinimumRegionCount);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_minimum_region_count"),
+        &WorldgenSettings::provinceMinimumRegionCount);
 
     ADD_GROUP("World", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::RECT2, "bounds"),
@@ -263,6 +269,12 @@ void WorldgenSettings::_bind_methods() {
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1000,0.01,or_greater"),
                  "set_province_base_cost", "get_province_base_cost");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "province_minimum_region_count",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "1,1024,1,or_greater"),
+                 "set_province_minimum_region_count",
+                 "get_province_minimum_region_count");
 }
 
 void WorldgenSettings::setBounds(const godot::Rect2 &bounds) {
@@ -463,6 +475,14 @@ void WorldgenSettings::setProvinceBaseCost(double cost) {
 
 double WorldgenSettings::provinceBaseCost() const noexcept {
     return m_provinceBaseCost;
+}
+
+void WorldgenSettings::setProvinceMinimumRegionCount(std::int64_t count) {
+    m_provinceMinimumRegionCount = count;
+}
+
+std::int64_t WorldgenSettings::provinceMinimumRegionCount() const noexcept {
+    return m_provinceMinimumRegionCount;
 }
 
 } // namespace worldgen

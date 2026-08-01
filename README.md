@@ -85,6 +85,7 @@ settings.province_river_contribution = 5.0
 settings.province_elevation_contribution = 10.0
 settings.province_distance_contribution = 5.0
 settings.province_base_cost = 1.0
+settings.province_minimum_region_count = 3
 generator.settings = settings
 
 var world: VoronoiWorldData = generator.generate()
@@ -149,13 +150,28 @@ At each step the generator selects the globally cheapest frontier transition;
 costs in the same absolute `EPS` bucket use region and source IDs as deterministic
 tie-breakers. Growth stops when the frontier is empty or its cheapest claim
 exceeds the remaining score, then the next unclaimed land region starts another
-province. Thus every land region belongs to exactly one province, while water
-regions belong to none; province indices are stable for fixed settings and
+province.
+
+After growth, provinces containing fewer than
+`province_minimum_region_count` regions are removed when another province is
+reachable through land neighbors. Their regions are reassigned independently in
+neighbor-distance rounds. Each region selects the province held by the largest
+number of its already assigned neighbors, with the lower province ID breaking a
+tie. This can split one small province across several surrounding provinces. If
+a connected land component contains only small provinces, its largest province
+(then lowest ID) remains as an anchor so the component always has an owner.
+Absorbed regions are appended after the surviving province's original claim
+order; merging does not spend its remaining growth score. A value of `1`
+disables this cleanup in practice.
+
+Thus every land region belongs to exactly one province, while water regions
+belong to none; province indices are compact and stable for fixed settings and
 generation seed.
 
 Province `i` owns the region IDs in
 `[province_offsets[i], province_offsets[i + 1])` of `province_region_ids`, in
-claim order with its seed first. `province_seed_region_ids` and
+its original claim order with the seed first, followed by any absorbed regions.
+`province_seed_region_ids` and
 `province_remaining_scores` contain one value per province, while
 `region_province_indices[region_id]` provides the inverse lookup and is `-1` for
 water regions. Consequently, `province_region_ids` contains exactly the land

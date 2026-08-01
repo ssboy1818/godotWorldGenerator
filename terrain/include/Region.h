@@ -109,6 +109,20 @@ public:
         m_provinceId = province;
     }
 
+    void reassignProvinceId(ProvinceId currentProvince,
+                            ProvinceId replacementProvince) {
+        if (currentProvince == INVALID_PROVINCE_ID
+            || replacementProvince == INVALID_PROVINCE_ID) {
+            throw std::invalid_argument(
+                "A region needs valid current and replacement province IDs.");
+        }
+        if (m_provinceId != currentProvince) {
+            throw std::logic_error(
+                "A region cannot be reassigned from a province it does not belong to.");
+        }
+        m_provinceId = replacementProvince;
+    }
+
     [[nodiscard]] const std::vector<RiverId> &edgeRivers() const noexcept {
         return m_edgeRivers;
     }
