@@ -339,12 +339,14 @@ struct MoreExpensiveClaim {
     }
 
     std::vector<std::vector<RegionId>> absorbedRegions(provinces.size());
+    const auto needsReassignment = [&](RegionId region) {
+        return originalOwners[region] != INVALID_PROVINCE_ID
+               && finalOwners[region] == INVALID_PROVINCE_ID;
+    };
     std::vector<RegionId> frontier;
     for (std::size_t region = 0; region < regions.size(); ++region) {
-        if (originalOwners[region] == INVALID_PROVINCE_ID
-            || finalOwners[region] != INVALID_PROVINCE_ID) {
+        if (!needsReassignment(static_cast<RegionId>(region)))
             continue;
-        }
         if (std::ranges::any_of(regionNeighbors[region],
                                 [&](RegionId neighbor) {
                                     return finalOwners[neighbor]
@@ -366,7 +368,7 @@ struct MoreExpensiveClaim {
         std::vector<std::pair<RegionId, ProvinceId>> assignments;
         assignments.reserve(frontier.size());
         for (const auto region : frontier) {
-            if (finalOwners[region] != INVALID_PROVINCE_ID)
+            if (!needsReassignment(region))
                 continue;
 
             std::vector<ProvinceId> candidates;
@@ -396,6 +398,15 @@ struct MoreExpensiveClaim {
             assignments.emplace_back(region, selected);
         }
 
+        if (assignments.empty()) {
+            throw std::logic_error(
+                "Small-province reassignment frontier made no progress.");
+        }
+        if (assignments.size() > unassignedCount) {
+            throw std::logic_error(
+                "Small-province reassignment exceeded its unassigned land count.");
+        }
+
         frontier.clear();
         for (const auto &[region, province] : assignments) {
             finalOwners[region] = province;
@@ -404,7 +415,7 @@ struct MoreExpensiveClaim {
         for (const auto &assignment : assignments) {
             const auto region = assignment.first;
             for (const auto neighbor : regionNeighbors[region]) {
-                if (finalOwners[neighbor] == INVALID_PROVINCE_ID)
+                if (needsReassignment(neighbor))
                     frontier.push_back(neighbor);
             }
         }

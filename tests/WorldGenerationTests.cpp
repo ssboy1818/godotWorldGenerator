@@ -919,6 +919,47 @@ void testSmallProvinceMerging() {
             "An undersized province without another province was deleted.");
 }
 
+void testCoastalSmallProvinceMerging() {
+    const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
+    const WorldDivision division{
+        .cells = {
+            {.id = 0, .sitePosition = {1.0, 5.0}, .neighbors = {1}},
+            {.id = 1, .sitePosition = {3.0, 5.0}, .neighbors = {0, 2, 3}},
+            {.id = 2, .sitePosition = {5.0, 5.0}, .neighbors = {1}},
+            {.id = 3, .sitePosition = {3.0, 3.0}, .neighbors = {1}},
+        },
+    };
+    std::vector<Region> regions;
+    regions.emplace_back(0, 1.0, 0.0, 0, 0.0, 0.0, 0.0);
+    regions.emplace_back(1, 1.0, 0.0, 0, 0.0, 0.0, 0.0);
+    regions.emplace_back(2, 1.0, 0.0, 0, 0.0, 0.0, 0.0);
+    regions.emplace_back(3, 0.0, 1.0, 0, 0.0, 0.0, 0.0);
+
+    const auto provinces = generateProvinces(bounds,
+                                             division,
+                                             regions,
+                                             0.0,
+                                             0.0,
+                                             0.0,
+                                             0.0,
+                                             1.0,
+                                             3,
+                                             0.0);
+    require(provinces.size() == 1,
+            "Coastal small provinces did not merge into their land anchor.");
+    require(provinces.front().regionIds()
+                == std::vector<RegionId>{0, 1, 2},
+            "Coastal province merging included water or lost a land region.");
+    require(std::ranges::all_of(regions.begin(),
+                                regions.begin() + 3,
+                                [](const Region &region) {
+                                    return region.provinceId() == 0;
+                                }),
+            "Coastal land regions did not receive the merged province ID.");
+    require(regions[3].isWater() && !regions[3].hasProvince(),
+            "Coastal province merging assigned a water region.");
+}
+
 void testProvinceSettingsValidation() {
     auto settings = WorldGenerationSettings{
         .bounds = {{0.0, 0.0}, {10.0, 10.0}},
@@ -1219,6 +1260,7 @@ int main() {
         testProvinceCostOrdering();
         testProvinceShortBorderPenalty();
         testSmallProvinceMerging();
+        testCoastalSmallProvinceMerging();
         testProvinceSettingsValidation();
         testRivers();
         testRiverSettingsValidation();
