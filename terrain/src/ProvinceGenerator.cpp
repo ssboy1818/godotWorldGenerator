@@ -160,6 +160,8 @@ std::vector<Province> generateProvinces(
     const auto sharedEdgeTolerance = numericalToleranceFor(boundingBox)
                                          .sharedEdgeLength();
     std::vector<bool> assigned(regions.size(), false);
+    for (std::size_t region = 0; region < indexedRegions.size(); ++region)
+        assigned[region] = indexedRegions[region]->isWater();
     std::vector<Province> provinces;
     provinces.reserve(regions.size());
 
@@ -234,6 +236,13 @@ std::vector<Province> generateProvinces(
         provinces.emplace_back(seed,
                                std::move(provinceRegions),
                                remainingScore);
+    }
+
+    for (const auto *region : indexedRegions) {
+        if (region->isLand() != region->hasProvince()) {
+            throw std::logic_error(
+                "Province generation did not assign exactly the land regions.");
+        }
     }
 
     return provinces;

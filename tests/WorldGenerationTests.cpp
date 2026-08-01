@@ -103,8 +103,11 @@ bool requireProvinceGrowth(const World &world,
                            const WorldGenerationSettings &settings,
                            const World *repeated = nullptr) {
     const auto regionCount = world.regions().size();
-    require(!world.provinces().empty() || regionCount == 0,
-            "A non-empty world has no provinces.");
+    const auto landRegionCount = static_cast<std::size_t>(std::ranges::count_if(
+        world.regions(),
+        [](const Region &region) { return region.isLand(); }));
+    require(!world.provinces().empty() || landRegionCount == 0,
+            "A world with land has no provinces.");
     if (repeated != nullptr) {
         require(world.provinces().size() == repeated->provinces().size(),
                 "Province counts are not deterministic.");
@@ -112,6 +115,17 @@ bool requireProvinceGrowth(const World &world,
 
     constexpr double coordinateTolerance = 1e-7;
     std::vector<bool> assigned(regionCount, false);
+    for (const auto &region : world.regions()) {
+        if (!region.isWater())
+            continue;
+        assigned[region.id()] = true;
+        require(!region.hasProvince(),
+                "A water region stores a province ID.");
+        if (repeated != nullptr) {
+            require(!repeated->regions().at(region.id()).hasProvince(),
+                    "Water-region province ownership is not deterministic.");
+        }
+    }
     auto assignedCount = std::size_t{0};
     auto sawRiverFrontier = false;
     for (std::size_t provinceIndex = 0;
@@ -144,6 +158,8 @@ bool requireProvinceGrowth(const World &world,
         std::vector<RegionId> claimed;
         claimed.reserve(province.regionIds().size());
         for (const auto actualRegion : province.regionIds()) {
+            require(world.regions().at(actualRegion).isLand(),
+                    "A province contains a water region.");
             require(world.regions().at(actualRegion).provinceId()
                         == provinceIndex,
                     "A region stores an incorrect province ID.");
@@ -242,8 +258,8 @@ bool requireProvinceGrowth(const World &world,
                     "A province stored an incorrect remaining score.");
     }
 
-    require(assignedCount == regionCount,
-            "Provinces do not assign every region exactly once.");
+    require(assignedCount == landRegionCount,
+            "Provinces do not assign every land region exactly once.");
     return sawRiverFrontier;
 }
 
@@ -596,6 +612,8 @@ void testProvinceBudgets() {
         .columns = 5,
         .rows = 4,
         .jitter = 0.65,
+        .seaLevel = 0.0,
+        .edgeStrength = 0.0,
         .riverSourceCount = 0,
         .provinceStartScore = 2.5,
         .provinceRiverContribution = 0.0,
@@ -622,6 +640,16 @@ void testProvinceBudgets() {
     require(freeWorld.provinces().size() == 1,
             "Free claims did not combine a connected world into one province.");
     requireProvinceGrowth(freeWorld, settings);
+
+    settings.seaLevel = 1.0;
+    settings.edgeStrength = 1.0;
+    const auto waterWorld = WorldGenerator{settings}.generate();
+    require(std::ranges::all_of(waterWorld.regions(),
+                                &Region::isWater),
+            "The water-only province fixture contains land.");
+    require(waterWorld.provinces().empty(),
+            "A water-only world generated provinces.");
+    requireProvinceGrowth(waterWorld, settings);
 }
 
 void testProvinceSettingsValidation() {

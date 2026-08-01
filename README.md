@@ -130,10 +130,10 @@ water are retained. A routing step may rise by at most
 the river on the polygon edge from `vertices[j]` to the next vertex of that cell,
 or is `-1`. Use `cell_vertex_offsets` to find each cell's edge range.
 
-Province generation runs after rivers. The lowest-ID unclaimed region becomes a
-seed with `province_start_score`; its province repeatedly claims the cheapest
-unclaimed region neighboring any current member. Crossing from region `a` to
-region `b` costs:
+Province generation runs after rivers and considers land regions only. The
+lowest-ID unclaimed land region becomes a seed with `province_start_score`; its
+province repeatedly claims the cheapest unclaimed land region neighboring any
+current member. Crossing from region `a` to region `b` costs:
 
 ```text
 province_base_cost
@@ -142,12 +142,15 @@ province_base_cost
 ```
 
 The seed itself is free. Growth stops when the frontier is empty or its cheapest
-claim exceeds the remaining score, then the next unclaimed region starts another
-province. Thus every region belongs to exactly one province; province indices are
-stable for fixed settings and generation seed.
+claim exceeds the remaining score, then the next unclaimed land region starts
+another province. Thus every land region belongs to exactly one province, while
+water regions belong to none; province indices are stable for fixed settings and
+generation seed.
 
 Province `i` owns the region IDs in
 `[province_offsets[i], province_offsets[i + 1])` of `province_region_ids`, in
 claim order with its seed first. `province_seed_region_ids` and
 `province_remaining_scores` contain one value per province, while
-`region_province_indices[region_id]` provides the inverse lookup.
+`region_province_indices[region_id]` provides the inverse lookup and is `-1` for
+water regions. Consequently, `province_region_ids` contains exactly the land
+region IDs rather than one entry per world region.

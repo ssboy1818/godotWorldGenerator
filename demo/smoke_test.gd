@@ -69,11 +69,11 @@ func _initialize() -> void:
     assert(world.river_offsets[-1] == world.river_vertices.size())
     assert(world.province_count > 0)
     assert(world.province_offsets.size() == world.province_count + 1)
-    assert(world.province_region_ids.size() == world.cell_count)
+    assert(world.province_region_ids.size() <= world.cell_count)
     assert(world.province_seed_region_ids.size() == world.province_count)
     assert(world.province_remaining_scores.size() == world.province_count)
     assert(world.region_province_indices.size() == world.cell_count)
-    assert(world.province_offsets[-1] == world.cell_count)
+    assert(world.province_offsets[-1] == world.province_region_ids.size())
     for region in world.cell_count:
         assert(world.temperatures[region] >= settings.pole_temperature)
         assert(world.temperatures[region] <= settings.equator_temperature)
@@ -122,8 +122,13 @@ func _initialize() -> void:
             assert(assigned_regions[region] == 0)
             assert(world.region_province_indices[region] == province)
             assigned_regions[region] = 1
-    for assigned in assigned_regions:
-        assert(assigned == 1)
+    for region in world.cell_count:
+        if world.region_types[region] == VoronoiWorldData.REGION_TYPE_LAND:
+            assert(assigned_regions[region] == 1)
+            assert(world.region_province_indices[region] >= 0)
+        else:
+            assert(assigned_regions[region] == 0)
+            assert(world.region_province_indices[region] == -1)
 
     var repeated := generator.generate() as VoronoiWorldData
     assert(repeated != null)

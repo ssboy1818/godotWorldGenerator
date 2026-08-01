@@ -526,12 +526,17 @@ void VoronoiWorldData::populate(const World &world) {
     riverOffsets[rivers.size()] = static_cast<std::int32_t>(riverNodeOffset);
 
     const auto &provinces = world.provinces();
-    if (provinces.size() > cells.size()) {
+    auto landRegionCount = std::size_t{0};
+    for (const auto &region : world.regions()) {
+        if (region.isLand())
+            ++landRegionCount;
+    }
+    if (provinces.size() > landRegionCount) {
         throw std::logic_error(
-            "The generated world has more provinces than regions.");
+            "The generated world has more provinces than land regions.");
     }
     resizePacked(m_provinceRegionIds,
-                 cells.size(),
+                 landRegionCount,
                  "Unable to allocate the province region ID array.");
     resizePacked(m_provinceOffsets,
                  provinces.size() + 1,
@@ -551,6 +556,8 @@ void VoronoiWorldData::populate(const World &world) {
     auto *provinceSeedRegionIds = m_provinceSeedRegionIds.ptrw();
     auto *provinceRemainingScores = m_provinceRemainingScores.ptrw();
     auto *regionProvinceIndices = m_regionProvinceIndices.ptrw();
+    for (std::size_t region = 0; region < cells.size(); ++region)
+        regionProvinceIndices[region] = -1;
     std::vector<bool> assignedRegions(cells.size(), false);
     std::size_t provinceRegionOffset = 0;
     for (std::size_t provinceIndex = 0;
@@ -575,6 +582,10 @@ void VoronoiWorldData::populate(const World &world) {
                 throw std::logic_error(
                     "Generated provinces contain invalid or duplicate region IDs.");
             }
+            if (world.regions()[regionIndex].isWater()) {
+                throw std::logic_error(
+                    "A generated province contains a water region.");
+            }
             if (world.regions()[regionIndex].provinceId() != provinceIndex) {
                 throw std::logic_error(
                     "A generated region references an inconsistent province ID.");
@@ -586,9 +597,23 @@ void VoronoiWorldData::populate(const World &world) {
             assignedRegions[regionIndex] = true;
         }
     }
-    if (provinceRegionOffset != cells.size()) {
+    if (provinceRegionOffset != landRegionCount) {
         throw std::logic_error(
-            "Generated provinces do not assign every region exactly once.");
+            "Generated provinces do not assign every land region exactly once.");
+    }
+    for (std::size_t region = 0; region < cells.size(); ++region) {
+        const auto &generatedRegion = world.regions()[region];
+        if (generatedRegion.isLand()
+            != static_cast<bool>(assignedRegions[region])) {
+            throw std::logic_error(
+                "Generated province ownership does not match land classification.");
+        }
+        if (generatedRegion.isWater()
+            && (generatedRegion.hasProvince()
+                || regionProvinceIndices[region] != -1)) {
+            throw std::logic_error(
+                "A generated water region references a province.");
+        }
     }
     provinceOffsets[provinces.size()] = static_cast<std::int32_t>(
         provinceRegionOffset);

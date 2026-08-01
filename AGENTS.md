@@ -34,8 +34,9 @@ world or provide a complete visualization demo.
    candidates toward water with a bounded elevation tolerance, accumulate flow at
    confluences, split the network into linked river segments, and annotate the
    corresponding region edge indices.
-9. Grow contiguous provinces from unclaimed region seeds using elevation, river,
-   and base claim costs, and assign every region a province ID.
+9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
+   river, and base claim costs, and assign every land region a province ID while
+   leaving water regions unassigned.
 10. Return an immutable core `World` containing the bounds, diagram, regions,
     rivers, and provinces.
 11. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
@@ -130,8 +131,8 @@ The domain-level orchestration layer.
   stores an ordered node vector plus the ID of its shared downstream segment.
 - `World` owns the generated diagram, regions, rivers, and provinces.
 - `Region` references a polygon by ID and stores elevation, land/water type,
-  temperature, humidity, vegetation, province ID, and one optional river ID per
-  ordered polygon edge.
+  temperature, humidity, vegetation, an optional land-only province ID, and one
+  optional river ID per ordered polygon edge.
 - `Province` stores an ordered union of region IDs, its seed, and remaining claim
   score.
 
