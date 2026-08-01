@@ -40,6 +40,11 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.pole_temperature, -20.0))
     assert(is_equal_approx(settings.vegetation_coefficient, 1.0))
     assert(is_equal_approx(settings.humidity_coefficient, 1.0))
+    assert(is_equal_approx(settings.temperature_noise_strength, 8.0))
+    assert(is_equal_approx(settings.temperature_noise_frequency, 0.003))
+    assert(is_equal_approx(settings.temperature_elevation_cooling, 20.0))
+    assert(is_equal_approx(settings.temperature_humidity_influence, 4.0))
+    assert(is_equal_approx(settings.temperature_latitude_exponent, 1.0))
     assert(is_equal_approx(settings.ocean_humidity_coefficient, 0.2))
     assert(is_equal_approx(settings.ocean_humidity_distance_ratio, 0.12))
     assert(is_equal_approx(settings.land_type_snow_temperature, 0.0))
@@ -64,6 +69,11 @@ func _initialize() -> void:
     settings.pole_temperature = -25.0
     settings.vegetation_coefficient = 1.25
     settings.humidity_coefficient = 0.8
+    settings.temperature_noise_strength = 7.0
+    settings.temperature_noise_frequency = 0.0025
+    settings.temperature_elevation_cooling = 18.0
+    settings.temperature_humidity_influence = 3.5
+    settings.temperature_latitude_exponent = 1.15
     settings.ocean_humidity_coefficient = 0.18
     settings.ocean_humidity_distance_ratio = 0.15
     settings.land_type_snow_temperature = -1.0
@@ -125,8 +135,8 @@ func _initialize() -> void:
         if world.region_types[region] == VoronoiWorldData.REGION_TYPE_LAND:
             assert(land >= 0 and land < world.land_region_ids.size())
             assert(world.land_region_ids[land] == region)
-            assert(world.land_temperatures[land] >= settings.pole_temperature)
-            assert(world.land_temperatures[land] <= settings.equator_temperature)
+            assert(world.land_temperatures[land] >= -50.0)
+            assert(world.land_temperatures[land] <= 50.0)
             assert(world.land_humidities[land] >= 0.0)
             assert(world.land_humidities[land] <= 1.0)
             assert(world.land_vegetations[land] >= 0.0)

@@ -49,6 +49,15 @@ double normalizedDistance(const BoundingBox &bounds,
                                / std::hypot(width, height));
 }
 
+double normalizedLandElevation(const Region &region) {
+    if (region.seaLevel() >= 1.0)
+        return 0.0;
+    return std::clamp((region.elevation() - region.seaLevel())
+                          / (1.0 - region.seaLevel()),
+                      0.0,
+                      1.0);
+}
+
 bool pointsNear(Vector2d first, Vector2d second, double coordinateTolerance) {
     return (first - second).length() <= coordinateTolerance;
 }
@@ -563,6 +572,11 @@ void testRegionClimate() {
         .poleTemperature = settings.poleTemperature,
         .vegetationCoefficient = settings.vegetationCoefficient,
         .humidityCoefficient = settings.humidityCoefficient,
+        .temperatureNoiseStrength = settings.temperatureNoiseStrength,
+        .temperatureNoiseFrequency = settings.temperatureNoiseFrequency,
+        .temperatureElevationCooling = settings.temperatureElevationCooling,
+        .temperatureHumidityInfluence = settings.temperatureHumidityInfluence,
+        .temperatureLatitudeExponent = settings.temperatureLatitudeExponent,
         .noiseOctaves = settings.noiseOctaves,
         .noiseFrequency = settings.noiseFrequency,
         .noiseLacunarity = settings.noiseLacunarity,
@@ -594,7 +608,11 @@ void testRegionClimate() {
         require(region.landClimateId() == expectedLandClimate,
                 "Land climate IDs are not compact and ordered by region ID.");
         const auto &cell = world.division().cells.at(region.cell());
-        const auto expected = climateGenerator.sample(cell.sitePosition);
+        auto expected = climateGenerator.sample(cell.sitePosition);
+        expected.temperature = climateGenerator.temperature(
+            cell.sitePosition,
+            normalizedLandElevation(region),
+            expected.humidity);
         const auto &actual = world.landClimates().at(region.landClimateId());
         const auto &repeatedClimate = repeated.landClimates().at(
             repeatedRegion.landClimateId());
@@ -643,6 +661,21 @@ void testClimateSettingsValidation() {
     requireNear(settings.humidityCoefficient,
                 1.0,
                 "The default humidity coefficient must be one.");
+    requireNear(settings.temperatureNoiseStrength,
+                8.0,
+                "The default temperature noise strength must be eight.");
+    requireNear(settings.temperatureNoiseFrequency,
+                0.003,
+                "The default temperature noise frequency must be 0.003.");
+    requireNear(settings.temperatureElevationCooling,
+                20.0,
+                "The default elevation cooling must be 20.");
+    requireNear(settings.temperatureHumidityInfluence,
+                4.0,
+                "The default temperature humidity influence must be four.");
+    requireNear(settings.temperatureLatitudeExponent,
+                1.0,
+                "The default temperature latitude exponent must be one.");
     requireNear(settings.oceanHumidityCoefficient,
                 0.2,
                 "The default ocean humidity coefficient must be 0.2.");
@@ -682,6 +715,47 @@ void testClimateSettingsValidation() {
     }
 
     settings.humidityCoefficient = 1.0;
+    settings.temperatureNoiseStrength = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative temperature noise strength was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.temperatureNoiseStrength = 8.0;
+    settings.temperatureNoiseFrequency = 0.0;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A zero temperature noise frequency was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.temperatureNoiseFrequency = 0.003;
+    settings.temperatureElevationCooling = 100.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "Elevation cooling above 100 was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.temperatureElevationCooling = 20.0;
+    settings.temperatureHumidityInfluence =
+        std::numeric_limits<double>::infinity();
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "Non-finite temperature humidity influence was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.temperatureHumidityInfluence = 4.0;
+    settings.temperatureLatitudeExponent = 0.0;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A zero temperature latitude exponent was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.temperatureLatitudeExponent = 1.0;
     settings.oceanHumidityCoefficient = 1.01;
     try {
         static_cast<void>(WorldGenerator{settings});
@@ -736,6 +810,7 @@ void testOceanHumidity() {
     auto boostedLandCount = std::size_t{0};
     auto coastalLandCount = std::size_t{0};
     auto decayedLandCount = std::size_t{0};
+    auto cooledLandCount = std::size_t{0};
     for (const auto &region : world.regions()) {
         if (!region.isLand())
             continue;
@@ -756,10 +831,16 @@ void testOceanHumidity() {
                 "Ocean humidity is outside its configured contribution range.");
         require(sample.humidity == repeatedSample.humidity,
                 "Ocean humidity is not deterministic.");
+        require(sample.temperature == repeatedSample.temperature,
+                "Ocean-adjusted temperature is not deterministic.");
+        require(sample.temperature <= disabledSample.temperature + tolerance,
+                "Ocean humidity warmed a land region.");
 
         if (sample.humidity <= 0.0)
             continue;
         ++boostedLandCount;
+        if (sample.temperature < disabledSample.temperature - tolerance)
+            ++cooledLandCount;
         if (std::abs(sample.humidity
                      - settings.oceanHumidityCoefficient) <= tolerance) {
             ++coastalLandCount;
@@ -773,6 +854,8 @@ void testOceanHumidity() {
             "Ocean-adjacent land did not receive the full humidity contribution.");
     require(decayedLandCount > 0,
             "Ocean humidity did not decay into inland regions.");
+    require(cooledLandCount > 0,
+            "Ocean humidity did not affect final land temperature.");
 }
 
 void testProvinceBudgets() {
@@ -1339,6 +1422,11 @@ void testRivers() {
         .poleTemperature = settings.poleTemperature,
         .vegetationCoefficient = settings.vegetationCoefficient,
         .humidityCoefficient = settings.humidityCoefficient,
+        .temperatureNoiseStrength = settings.temperatureNoiseStrength,
+        .temperatureNoiseFrequency = settings.temperatureNoiseFrequency,
+        .temperatureElevationCooling = settings.temperatureElevationCooling,
+        .temperatureHumidityInfluence = settings.temperatureHumidityInfluence,
+        .temperatureLatitudeExponent = settings.temperatureLatitudeExponent,
         .noiseOctaves = settings.noiseOctaves,
         .noiseFrequency = settings.noiseFrequency,
         .noiseLacunarity = settings.noiseLacunarity,
@@ -1366,9 +1454,13 @@ void testRivers() {
         const auto base = climateGenerator.sample(
             world.division().cells.at(region.cell()).sitePosition);
         const auto &actual = world.landClimates().at(region.landClimateId());
+        const auto expectedTemperature = climateGenerator.temperature(
+            world.division().cells.at(region.cell()).sitePosition,
+            normalizedLandElevation(region),
+            actual.humidity);
         requireNear(actual.temperature,
-                    base.temperature,
-                    "A river changed land temperature.");
+                    expectedTemperature,
+                    "River-adjusted humidity did not affect final temperature.");
         requireNear(actual.humidity,
                     std::clamp(base.humidity
                                    + strongestRiver

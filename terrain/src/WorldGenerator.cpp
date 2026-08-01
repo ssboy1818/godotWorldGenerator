@@ -77,6 +77,32 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument(
             "Humidity coefficient must be between zero and two.");
     }
+    const auto validTemperatureModifier = [](double value) {
+        return std::isfinite(value) && value >= 0.0 && value <= 100.0;
+    };
+    if (!validTemperatureModifier(settings.temperatureNoiseStrength)) {
+        throw std::invalid_argument(
+            "Temperature noise strength must be between zero and 100.");
+    }
+    if (!std::isfinite(settings.temperatureNoiseFrequency)
+        || settings.temperatureNoiseFrequency <= 0.0) {
+        throw std::invalid_argument(
+            "Temperature noise frequency must be positive.");
+    }
+    if (!validTemperatureModifier(settings.temperatureElevationCooling)) {
+        throw std::invalid_argument(
+            "Temperature elevation cooling must be between zero and 100.");
+    }
+    if (!validTemperatureModifier(settings.temperatureHumidityInfluence)) {
+        throw std::invalid_argument(
+            "Temperature humidity influence must be between zero and 100.");
+    }
+    if (!std::isfinite(settings.temperatureLatitudeExponent)
+        || settings.temperatureLatitudeExponent <= 0.0
+        || settings.temperatureLatitudeExponent > 10.0) {
+        throw std::invalid_argument(
+            "Temperature latitude exponent must be between zero and ten.");
+    }
     const auto validOceanHumiditySetting = [](double value) {
         return std::isfinite(value) && value >= 0.0 && value <= 1.0;
     };
@@ -339,6 +365,37 @@ void applyOceanHumidityInfluence(
     }
 }
 
+void finalizeLandTemperatures(
+    const WorldDivision &division,
+    std::span<const Region> regions,
+    std::span<climate::ClimateSample> landClimates,
+    const climate::ClimateGenerator &climateGenerator) {
+    for (const auto &region : regions) {
+        if (!region.isLand())
+            continue;
+        if (region.cell() >= division.cells.size()
+            || region.landClimateId() >= landClimates.size()) {
+            throw std::logic_error(
+                "Temperature finalization received invalid region data.");
+        }
+
+        const auto normalizedElevation = region.seaLevel() >= 1.0
+                                             ? 0.0
+                                             : std::clamp(
+                                                   (region.elevation()
+                                                    - region.seaLevel())
+                                                       / (1.0
+                                                          - region.seaLevel()),
+                                                   0.0,
+                                                   1.0);
+        auto &sample = landClimates[region.landClimateId()];
+        sample.temperature = climateGenerator.temperature(
+            division.cells[region.cell()].sitePosition,
+            normalizedElevation,
+            sample.humidity);
+    }
+}
+
 void classifyLandRegions(std::span<Region> regions,
                          std::span<const climate::ClimateSample> landClimates,
                          const LandTypeConditions &conditions) {
@@ -392,6 +449,11 @@ World WorldGenerator::generate() const {
         .poleTemperature = m_settings.poleTemperature,
         .vegetationCoefficient = m_settings.vegetationCoefficient,
         .humidityCoefficient = m_settings.humidityCoefficient,
+        .temperatureNoiseStrength = m_settings.temperatureNoiseStrength,
+        .temperatureNoiseFrequency = m_settings.temperatureNoiseFrequency,
+        .temperatureElevationCooling = m_settings.temperatureElevationCooling,
+        .temperatureHumidityInfluence = m_settings.temperatureHumidityInfluence,
+        .temperatureLatitudeExponent = m_settings.temperatureLatitudeExponent,
         .noiseOctaves = m_settings.noiseOctaves,
         .noiseFrequency = m_settings.noiseFrequency,
         .noiseLacunarity = m_settings.noiseLacunarity,
@@ -422,7 +484,11 @@ World WorldGenerator::generate() const {
                     "The generated world has too many land climate samples.");
             }
             landClimateId = static_cast<LandClimateId>(landClimates.size());
-            landClimates.push_back(climateGenerator.sample(cell.sitePosition));
+            landClimates.push_back({
+                .temperature = 0.0,
+                .humidity = climateGenerator.humidity(cell.sitePosition),
+                .vegetation = climateGenerator.vegetation(cell.sitePosition),
+            });
         }
         regions.emplace_back(cell.id,
                              elevation,
@@ -455,6 +521,10 @@ World WorldGenerator::generate() const {
                                 landClimates,
                                 m_settings.oceanHumidityCoefficient,
                                 m_settings.oceanHumidityDistanceRatio);
+    finalizeLandTemperatures(division,
+                             regions,
+                             landClimates,
+                             climateGenerator);
     classifyLandRegions(regions,
                         landClimates,
                         m_settings.landTypeConditions);

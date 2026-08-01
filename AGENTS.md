@@ -28,17 +28,19 @@ world or provide a complete visualization demo.
 5. Sample multi-octave Perlin noise at each site's position.
 6. Raise the effective sea level near the world border using a smooth edge-decay
    mask and determine each polygon's land/water classification.
-7. For land regions, sample latitude-based temperature and independent,
-   domain-separated humidity and vegetation noise into a dense land-only climate
-   array. Build one `Region` per polygon with the climate ID or the invalid ID for
-   water, and record high land regions as possible river sources during this pass.
+7. For land regions, sample independent, domain-separated humidity and vegetation
+   noise into a dense land-only climate array. Build one `Region` per polygon with
+   the climate ID or the invalid ID for water, and record high land regions as
+   possible river sources during this pass.
 8. Canonicalize shared polygon vertices into a boundary graph, route reachable
    candidates toward water with a bounded elevation tolerance, accumulate flow at
    confluences, split the network into linked river segments, and annotate the
    corresponding region edge indices. Increase humidity and vegetation in land
    regions adjoining rivers according to the strongest local segment's flow.
-   Identify boundary-connected ocean cells, add distance-decayed ocean humidity
-   to land, then classify every land region from compound final-climate and
+   Identify boundary-connected ocean cells and add distance-decayed ocean
+   humidity to land. Finalize temperature from shaped latitude, independent
+   temperature noise, normalized elevation, and the adjusted humidity, then
+   classify every land region from compound final-climate and
    normalized-elevation conditions.
 9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
    river, normalized seed-distance, short shared-border, and base claim costs.
@@ -114,10 +116,12 @@ configuration state, especially before adding concurrent generation.
 
 Deterministic region climate sampling.
 
-- `ClimateGenerator` owns validated temperature, coefficient, seed, and shared
+- `ClimateGenerator` owns validated temperature, coefficient, seed, and
   noise-shape settings for one world.
-- Temperature interpolates from the equator at the vertical center to equal pole
-  temperatures at the top and bottom bounds.
+- Temperature combines a configurable latitude curve, a domain-separated fBm
+  offset, normalized-elevation cooling, and a centered humidity adjustment. The
+  terrain layer supplies final river/ocean-adjusted humidity and elevation before
+  land-type classification.
 - Humidity and vegetation use independent seed domains and normalized fBm noise;
   their coefficients scale and clamp results to `[0, 1]`.
 
@@ -251,8 +255,9 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
 - site columns/rows or another site-placement strategy;
 - jitter and all random seeds;
 - sea level, edge-decay ratio/strength, noise parameters, climate coefficients,
-  ocean humidity distance/strength, temperatures, compound land-type condition
-  thresholds, and river source/routing controls;
+  ocean humidity distance/strength, temperatures, temperature noise/elevation/
+  humidity/latitude controls, compound land-type condition thresholds, and river
+  source/routing controls;
 - per-cell site position, ordered polygon vertices, elevation, land/water type,
   and mappings to compact land-only temperature, humidity, vegetation, and land
   type arrays;

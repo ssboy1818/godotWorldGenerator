@@ -62,6 +62,21 @@ public:
     void setHumidityCoefficient(double coefficient);
     [[nodiscard]] double humidityCoefficient() const noexcept;
 
+    void setTemperatureNoiseStrength(double strength);
+    [[nodiscard]] double temperatureNoiseStrength() const noexcept;
+
+    void setTemperatureNoiseFrequency(double frequency);
+    [[nodiscard]] double temperatureNoiseFrequency() const noexcept;
+
+    void setTemperatureElevationCooling(double cooling);
+    [[nodiscard]] double temperatureElevationCooling() const noexcept;
+
+    void setTemperatureHumidityInfluence(double influence);
+    [[nodiscard]] double temperatureHumidityInfluence() const noexcept;
+
+    void setTemperatureLatitudeExponent(double exponent);
+    [[nodiscard]] double temperatureLatitudeExponent() const noexcept;
+
     void setOceanHumidityCoefficient(double coefficient);
     [[nodiscard]] double oceanHumidityCoefficient() const noexcept;
 
@@ -157,6 +172,11 @@ private:
     double m_poleTemperature{-20.0};
     double m_vegetationCoefficient{1.0};
     double m_humidityCoefficient{1.0};
+    double m_temperatureNoiseStrength{8.0};
+    double m_temperatureNoiseFrequency{0.003};
+    double m_temperatureElevationCooling{20.0};
+    double m_temperatureHumidityInfluence{4.0};
+    double m_temperatureLatitudeExponent{1.0};
     double m_oceanHumidityCoefficient{0.2};
     double m_oceanHumidityDistanceRatio{0.12};
     double m_landTypeSnowTemperature{0.0};

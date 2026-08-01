@@ -29,6 +29,11 @@ struct WorldGenerationSettings {
     double poleTemperature{-20.0};
     double vegetationCoefficient{1.0};
     double humidityCoefficient{1.0};
+    double temperatureNoiseStrength{8.0};
+    double temperatureNoiseFrequency{0.003};
+    double temperatureElevationCooling{20.0};
+    double temperatureHumidityInfluence{4.0};
+    double temperatureLatitudeExponent{1.0};
     double oceanHumidityCoefficient{0.2};
     double oceanHumidityDistanceRatio{0.12};
 

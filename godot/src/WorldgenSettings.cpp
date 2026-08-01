@@ -78,6 +78,36 @@ void WorldgenSettings::_bind_methods() {
         godot::D_METHOD("get_humidity_coefficient"),
         &WorldgenSettings::humidityCoefficient);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("set_temperature_noise_strength", "strength"),
+        &WorldgenSettings::setTemperatureNoiseStrength);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_temperature_noise_strength"),
+        &WorldgenSettings::temperatureNoiseStrength);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_temperature_noise_frequency", "frequency"),
+        &WorldgenSettings::setTemperatureNoiseFrequency);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_temperature_noise_frequency"),
+        &WorldgenSettings::temperatureNoiseFrequency);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_temperature_elevation_cooling", "cooling"),
+        &WorldgenSettings::setTemperatureElevationCooling);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_temperature_elevation_cooling"),
+        &WorldgenSettings::temperatureElevationCooling);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_temperature_humidity_influence", "influence"),
+        &WorldgenSettings::setTemperatureHumidityInfluence);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_temperature_humidity_influence"),
+        &WorldgenSettings::temperatureHumidityInfluence);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_temperature_latitude_exponent", "exponent"),
+        &WorldgenSettings::setTemperatureLatitudeExponent);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_temperature_latitude_exponent"),
+        &WorldgenSettings::temperatureLatitudeExponent);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("set_ocean_humidity_coefficient", "coefficient"),
         &WorldgenSettings::setOceanHumidityCoefficient);
     godot::ClassDB::bind_method(
@@ -305,6 +335,36 @@ void WorldgenSettings::_bind_methods() {
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,2,0.01"),
                  "set_humidity_coefficient", "get_humidity_coefficient");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "temperature_noise_strength",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,100,0.1"),
+                 "set_temperature_noise_strength",
+                 "get_temperature_noise_strength");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "temperature_noise_frequency",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0.000001,1,0.000001,or_greater"),
+                 "set_temperature_noise_frequency",
+                 "get_temperature_noise_frequency");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "temperature_elevation_cooling",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,100,0.1"),
+                 "set_temperature_elevation_cooling",
+                 "get_temperature_elevation_cooling");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "temperature_humidity_influence",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,100,0.1"),
+                 "set_temperature_humidity_influence",
+                 "get_temperature_humidity_influence");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "temperature_latitude_exponent",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0.01,10,0.01"),
+                 "set_temperature_latitude_exponent",
+                 "get_temperature_latitude_exponent");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
                                      "ocean_humidity_coefficient",
                                      godot::PROPERTY_HINT_RANGE,
@@ -585,6 +645,46 @@ void WorldgenSettings::setHumidityCoefficient(double coefficient) {
 
 double WorldgenSettings::humidityCoefficient() const noexcept {
     return m_humidityCoefficient;
+}
+
+void WorldgenSettings::setTemperatureNoiseStrength(double strength) {
+    m_temperatureNoiseStrength = strength;
+}
+
+double WorldgenSettings::temperatureNoiseStrength() const noexcept {
+    return m_temperatureNoiseStrength;
+}
+
+void WorldgenSettings::setTemperatureNoiseFrequency(double frequency) {
+    m_temperatureNoiseFrequency = frequency;
+}
+
+double WorldgenSettings::temperatureNoiseFrequency() const noexcept {
+    return m_temperatureNoiseFrequency;
+}
+
+void WorldgenSettings::setTemperatureElevationCooling(double cooling) {
+    m_temperatureElevationCooling = cooling;
+}
+
+double WorldgenSettings::temperatureElevationCooling() const noexcept {
+    return m_temperatureElevationCooling;
+}
+
+void WorldgenSettings::setTemperatureHumidityInfluence(double influence) {
+    m_temperatureHumidityInfluence = influence;
+}
+
+double WorldgenSettings::temperatureHumidityInfluence() const noexcept {
+    return m_temperatureHumidityInfluence;
+}
+
+void WorldgenSettings::setTemperatureLatitudeExponent(double exponent) {
+    m_temperatureLatitudeExponent = exponent;
+}
+
+double WorldgenSettings::temperatureLatitudeExponent() const noexcept {
+    return m_temperatureLatitudeExponent;
 }
 
 void WorldgenSettings::setOceanHumidityCoefficient(double coefficient) {

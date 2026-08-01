@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string_view>
 
@@ -38,23 +39,65 @@ ClimateGenerationSettings settings() {
 }
 
 void testLatitudeTemperature() {
-    const ClimateGenerator generator{settings()};
+    auto value = settings();
+    value.temperatureNoiseStrength = 0.0;
+    value.temperatureElevationCooling = 0.0;
+    value.temperatureHumidityInfluence = 0.0;
+    const ClimateGenerator generator{value};
 
-    requireNear(generator.sample({30.0, 0.0}).temperature,
+    requireNear(generator.temperature({30.0, 0.0}, 0.0, 0.5),
                 -20.0,
                 "The top pole does not use the pole temperature.");
-    requireNear(generator.sample({30.0, 100.0}).temperature,
+    requireNear(generator.temperature({30.0, 100.0}, 0.0, 0.5),
                 -20.0,
                 "The bottom pole does not use the pole temperature.");
-    requireNear(generator.sample({30.0, 50.0}).temperature,
+    requireNear(generator.temperature({30.0, 50.0}, 0.0, 0.5),
                 30.0,
                 "The world center does not use the equator temperature.");
-    requireNear(generator.sample({30.0, 25.0}).temperature,
+    requireNear(generator.temperature({30.0, 25.0}, 0.0, 0.5),
                 5.0,
                 "Temperature does not interpolate by latitude.");
-    requireNear(generator.sample({30.0, 25.0}).temperature,
-                generator.sample({30.0, 75.0}).temperature,
+    requireNear(generator.temperature({30.0, 25.0}, 0.0, 0.5),
+                generator.temperature({30.0, 75.0}, 0.0, 0.5),
                 "Temperature is not symmetric around the equator.");
+}
+
+void testTemperatureModifiers() {
+    auto value = settings();
+    value.temperatureNoiseStrength = 0.0;
+    value.temperatureElevationCooling = 20.0;
+    value.temperatureHumidityInfluence = 4.0;
+    value.temperatureLatitudeExponent = 2.0;
+    const ClimateGenerator generator{value};
+    const Vector2d position{30.0, 25.0};
+
+    requireNear(generator.temperature(position, 0.0, 0.5),
+                17.5,
+                "Latitude exponent did not shape base temperature.");
+    requireNear(generator.temperature(position, 0.5, 0.5),
+                7.5,
+                "Elevation did not cool temperature.");
+    requireNear(generator.temperature(position, 0.0, 0.0),
+                19.5,
+                "Dryness did not warm temperature.");
+    requireNear(generator.temperature(position, 0.0, 1.0),
+                15.5,
+                "Humidity did not cool temperature.");
+
+    auto smoothSettings = settings();
+    smoothSettings.temperatureNoiseStrength = 0.0;
+    const ClimateGenerator smooth{smoothSettings};
+    const ClimateGenerator noisy{settings()};
+    const auto sample = noisy.sample(position);
+    requireNear(sample.temperature,
+                noisy.temperature(position, 0.0, sample.humidity),
+                "Climate sample temperature does not use final modifiers.");
+    require(sample.temperature
+                == noisy.temperature(position, 0.0, sample.humidity),
+            "Temperature noise is not deterministic.");
+    require(sample.temperature
+                != smooth.temperature(position, 0.0, sample.humidity),
+            "Temperature noise did not perturb the latitude gradient.");
 }
 
 void testClimateNoise() {
@@ -71,6 +114,9 @@ void testClimateNoise() {
     require(sample.humidity == repeated.humidity
                 && sample.vegetation == repeated.vegetation,
             "Climate noise is not deterministic.");
+    require(sample.humidity == generator.humidity(position)
+                && sample.vegetation == generator.vegetation(position),
+            "Individual climate fields disagree with the combined sample.");
     require(sample.humidity != sample.vegetation,
             "Humidity and vegetation use the same noise domain.");
 
@@ -95,7 +141,8 @@ void testClimateNoise() {
     auto otherSeedSettings = baseSettings;
     ++otherSeedSettings.seed;
     const auto otherSeed = ClimateGenerator{otherSeedSettings}.sample(position);
-    require(sample.humidity != otherSeed.humidity
+    require(sample.temperature != otherSeed.temperature
+                || sample.humidity != otherSeed.humidity
                 || sample.vegetation != otherSeed.vegetation,
             "Climate noise does not respond to the generation seed.");
 }
@@ -133,10 +180,56 @@ void testValidation() {
     } catch (const std::invalid_argument &) {
     }
 
+    value = settings();
+    value.temperatureNoiseStrength = 100.01;
+    try {
+        static_cast<void>(ClimateGenerator{value});
+        require(false, "Temperature noise strength above 100 was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    value = settings();
+    value.temperatureNoiseFrequency = 0.0;
+    try {
+        static_cast<void>(ClimateGenerator{value});
+        require(false, "A zero temperature noise frequency was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    value = settings();
+    value.temperatureElevationCooling = -0.01;
+    try {
+        static_cast<void>(ClimateGenerator{value});
+        require(false, "Negative temperature elevation cooling was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    value = settings();
+    value.temperatureHumidityInfluence =
+        std::numeric_limits<double>::infinity();
+    try {
+        static_cast<void>(ClimateGenerator{value});
+        require(false, "Non-finite temperature humidity influence was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    value = settings();
+    value.temperatureLatitudeExponent = 10.01;
+    try {
+        static_cast<void>(ClimateGenerator{value});
+        require(false, "A temperature latitude exponent above ten was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
     const ClimateGenerator generator{settings()};
     try {
         static_cast<void>(generator.sample({50.0, 101.0}));
         require(false, "A climate position outside the bounds was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+    try {
+        static_cast<void>(generator.temperature({50.0, 50.0}, 1.01, 0.5));
+        require(false, "Temperature accepted elevation above one.");
     } catch (const std::invalid_argument &) {
     }
 }
@@ -146,6 +239,7 @@ void testValidation() {
 int main() {
     try {
         testLatitudeTemperature();
+        testTemperatureModifiers();
         testClimateNoise();
         testValidation();
         std::cout << "Climate tests passed.\n";

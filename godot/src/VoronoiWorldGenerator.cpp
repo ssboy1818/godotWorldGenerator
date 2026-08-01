@@ -91,6 +91,11 @@ namespace {
         .poleTemperature = settings.poleTemperature(),
         .vegetationCoefficient = settings.vegetationCoefficient(),
         .humidityCoefficient = settings.humidityCoefficient(),
+        .temperatureNoiseStrength = settings.temperatureNoiseStrength(),
+        .temperatureNoiseFrequency = settings.temperatureNoiseFrequency(),
+        .temperatureElevationCooling = settings.temperatureElevationCooling(),
+        .temperatureHumidityInfluence = settings.temperatureHumidityInfluence(),
+        .temperatureLatitudeExponent = settings.temperatureLatitudeExponent(),
         .oceanHumidityCoefficient = settings.oceanHumidityCoefficient(),
         .oceanHumidityDistanceRatio = settings.oceanHumidityDistanceRatio(),
         .landTypeConditions = {

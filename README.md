@@ -5,8 +5,8 @@ It synchronously generates a bounded Voronoi world with deterministic terrain
 elevation, land/water classification, cell adjacency, and rivers that follow
 Voronoi borders downhill from high inland vertices. Regions are also grouped into
 deterministic, contiguous provinces using configurable terrain and river costs.
-An independent climate layer adds latitude-based temperature plus seeded humidity
-and vegetation fields.
+An independent climate layer adds seeded temperature, humidity, and vegetation
+fields, then adjusts final land temperature for latitude, elevation, and humidity.
 
 ## Build
 
@@ -76,6 +76,11 @@ settings.equator_temperature = 30.0
 settings.pole_temperature = -20.0
 settings.vegetation_coefficient = 1.0
 settings.humidity_coefficient = 1.0
+settings.temperature_noise_strength = 8.0
+settings.temperature_noise_frequency = 0.003
+settings.temperature_elevation_cooling = 20.0
+settings.temperature_humidity_influence = 4.0
+settings.temperature_latitude_exponent = 1.0
 settings.ocean_humidity_coefficient = 0.2
 settings.ocean_humidity_distance_ratio = 0.12
 settings.land_type_snow_temperature = 0.0
@@ -129,13 +134,10 @@ cell `i` uses the half-open ranges `[offsets[i], offsets[i + 1])` in the shared
 `VoronoiWorldData.REGION_TYPE_WATER` and `VoronoiWorldData.REGION_TYPE_LAND`.
 
 Climate values are sampled only for land cells at their site positions, the same
-positions used for elevation. Temperature interpolates linearly from
-`equator_temperature` at the vertical center of the bounds to `pole_temperature`
-at both the top and bottom. Both temperatures must be in `[-50, 50]`, and the pole
-cannot be warmer than the equator. Humidity and vegetation use independent
+positions used for elevation. Humidity and vegetation use independent
 deterministic fBm noise domains derived from the world seed and the shared noise
-octave/frequency settings. Their coefficients are in `[0, 2]`; results are clamped
-to `[0, 1]`. After rivers are generated, a land region touching one or more river
+shape settings. Their coefficients are in `[0, 2]`; results are clamped to
+`[0, 1]`. After rivers are generated, a land region touching one or more river
 edges receives an additional humidity and vegetation contribution from its
 strongest adjoining river segment. The additions are `river strength *
 river_humidity_coefficient` and `river strength *
@@ -149,8 +151,33 @@ over `ocean_humidity_distance_ratio * world bounds diagonal`. Only humidity is
 changed. A zero coefficient or distance ratio disables ocean humidity. Inland
 water that is not connected to the world boundary does not contribute.
 
-Each land region is classified after river and ocean climate contributions are
-applied.
+Temperature is finalized after both river and ocean humidity have been applied:
+
+```text
+latitude = abs(y - world_center_y) / world_half_height
+base = lerp(equator_temperature, pole_temperature,
+            pow(latitude, temperature_latitude_exponent))
+temperature = clamp(base
+                    + centered_temperature_noise * temperature_noise_strength
+                    - normalized_elevation * temperature_elevation_cooling
+                    + (0.5 - humidity) * temperature_humidity_influence,
+                    -50, 50)
+```
+
+Temperature noise has its own deterministic seed domain and
+`temperature_noise_frequency`; it reuses the common octave, lacunarity, and
+persistence settings. A strength of zero restores a smooth latitude curve.
+Elevation is normalized above each region's effective sea level, so high land is
+cooled without tying the result to an absolute world height. The centered
+humidity term weakly warms dry land and cools wet land without shifting a neutral
+humidity of `0.5`. Set either influence to zero to disable it. Both endpoint
+temperatures must be in `[-50, 50]`, the pole cannot be warmer than the equator,
+and the finalized result is clamped to that range. Noise strength, elevation
+cooling, and humidity influence are in `[0, 100]`; noise frequency must be
+positive, and the latitude exponent is in `(0, 10]`.
+
+Each land region is classified after river and ocean contributions and final
+temperature are applied.
 Elevation is normalized from the region's effective sea level to the maximum
 terrain elevation. Land-type settings define shared condition boundaries and
 must satisfy `snow <= cold < hot`, `dry < wet`, `sparse < lush`, and
