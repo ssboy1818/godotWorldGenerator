@@ -75,6 +75,18 @@ void VoronoiWorldData::_bind_methods() {
                                 &VoronoiWorldData::riverDownstreamIndices);
     godot::ClassDB::bind_method(godot::D_METHOD("get_cell_edge_rivers"),
                                 &VoronoiWorldData::cellEdgeRivers);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_province_count"),
+                                &VoronoiWorldData::provinceCount);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_province_region_ids"),
+                                &VoronoiWorldData::provinceRegionIds);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_province_offsets"),
+                                &VoronoiWorldData::provinceOffsets);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_province_seed_region_ids"),
+                                &VoronoiWorldData::provinceSeedRegionIds);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_province_remaining_scores"),
+                                &VoronoiWorldData::provinceRemainingScores);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_region_province_indices"),
+                                &VoronoiWorldData::regionProvinceIndices);
 
     BIND_CONSTANT(REGION_TYPE_WATER);
     BIND_CONSTANT(REGION_TYPE_LAND);
@@ -171,6 +183,42 @@ void VoronoiWorldData::_bind_methods() {
                                      "",
                                      readOnly),
                  "", "get_cell_edge_rivers");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "province_count",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_province_count");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "province_region_ids",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_province_region_ids");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "province_offsets",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_province_offsets");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "province_seed_region_ids",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_province_seed_region_ids");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_FLOAT64_ARRAY,
+                                     "province_remaining_scores",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_province_remaining_scores");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "region_province_indices",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_region_province_indices");
 }
 
 std::int64_t VoronoiWorldData::cellCount() const noexcept {
@@ -231,6 +279,30 @@ godot::PackedInt32Array VoronoiWorldData::riverDownstreamIndices() const {
 
 godot::PackedInt32Array VoronoiWorldData::cellEdgeRivers() const {
     return m_cellEdgeRivers;
+}
+
+std::int64_t VoronoiWorldData::provinceCount() const noexcept {
+    return m_provinceOffsets.size() == 0 ? 0 : m_provinceOffsets.size() - 1;
+}
+
+godot::PackedInt32Array VoronoiWorldData::provinceRegionIds() const {
+    return m_provinceRegionIds;
+}
+
+godot::PackedInt32Array VoronoiWorldData::provinceOffsets() const {
+    return m_provinceOffsets;
+}
+
+godot::PackedInt32Array VoronoiWorldData::provinceSeedRegionIds() const {
+    return m_provinceSeedRegionIds;
+}
+
+godot::PackedFloat64Array VoronoiWorldData::provinceRemainingScores() const {
+    return m_provinceRemainingScores;
+}
+
+godot::PackedInt32Array VoronoiWorldData::regionProvinceIndices() const {
+    return m_regionProvinceIndices;
 }
 
 void VoronoiWorldData::populate(const World &world) {
@@ -392,6 +464,70 @@ void VoronoiWorldData::populate(const World &world) {
             river.downstreamRiver);
     }
     riverOffsets[rivers.size()] = static_cast<std::int32_t>(riverNodeOffset);
+
+    const auto &provinces = world.provinces();
+    if (provinces.size() > cells.size()) {
+        throw std::logic_error(
+            "The generated world has more provinces than regions.");
+    }
+    resizePacked(m_provinceRegionIds,
+                 cells.size(),
+                 "Unable to allocate the province region ID array.");
+    resizePacked(m_provinceOffsets,
+                 provinces.size() + 1,
+                 "Unable to allocate the province offsets.");
+    resizePacked(m_provinceSeedRegionIds,
+                 provinces.size(),
+                 "Unable to allocate the province seed region ID array.");
+    resizePacked(m_provinceRemainingScores,
+                 provinces.size(),
+                 "Unable to allocate the province remaining score array.");
+    resizePacked(m_regionProvinceIndices,
+                 cells.size(),
+                 "Unable to allocate the region province index array.");
+
+    auto *provinceRegionIds = m_provinceRegionIds.ptrw();
+    auto *provinceOffsets = m_provinceOffsets.ptrw();
+    auto *provinceSeedRegionIds = m_provinceSeedRegionIds.ptrw();
+    auto *provinceRemainingScores = m_provinceRemainingScores.ptrw();
+    auto *regionProvinceIndices = m_regionProvinceIndices.ptrw();
+    std::vector<bool> assignedRegions(cells.size(), false);
+    std::size_t provinceRegionOffset = 0;
+    for (std::size_t provinceIndex = 0;
+         provinceIndex < provinces.size();
+         ++provinceIndex) {
+        const auto &province = provinces[provinceIndex];
+        if (province.regionIds().empty()
+            || province.seedRegion() != province.regionIds().front()
+            || !std::isfinite(province.remainingScore())
+            || province.remainingScore() < 0.0) {
+            throw std::logic_error("A generated province is invalid.");
+        }
+
+        provinceOffsets[provinceIndex] = static_cast<std::int32_t>(
+            provinceRegionOffset);
+        provinceSeedRegionIds[provinceIndex] = static_cast<std::int32_t>(
+            province.seedRegion());
+        provinceRemainingScores[provinceIndex] = province.remainingScore();
+        for (const auto region : province.regionIds()) {
+            const auto regionIndex = static_cast<std::size_t>(region);
+            if (regionIndex >= cells.size() || assignedRegions[regionIndex]) {
+                throw std::logic_error(
+                    "Generated provinces contain invalid or duplicate region IDs.");
+            }
+            provinceRegionIds[provinceRegionOffset++] = static_cast<std::int32_t>(
+                region);
+            regionProvinceIndices[regionIndex] = static_cast<std::int32_t>(
+                provinceIndex);
+            assignedRegions[regionIndex] = true;
+        }
+    }
+    if (provinceRegionOffset != cells.size()) {
+        throw std::logic_error(
+            "Generated provinces do not assign every region exactly once.");
+    }
+    provinceOffsets[provinces.size()] = static_cast<std::int32_t>(
+        provinceRegionOffset);
 }
 
 } // namespace worldgen

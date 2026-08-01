@@ -82,6 +82,10 @@ namespace {
         .riverMinimumSourceElevation = settings.riverMinimumSourceElevation(),
         .riverRandomness = settings.riverRandomness(),
         .riverElevationTolerance = settings.riverElevationTolerance(),
+        .provinceStartScore = settings.provinceStartScore(),
+        .provinceRiverContribution = settings.provinceRiverContribution(),
+        .provinceElevationContribution = settings.provinceElevationContribution(),
+        .provinceBaseCost = settings.provinceBaseCost(),
     };
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BoundingBox.h"
+#include "Province.h"
 #include "Region.h"
 #include "River.h"
 #include "WorldDivision.h"
@@ -15,11 +16,13 @@ public:
     World(BoundingBox boundingBox,
           WorldDivision division,
           std::vector<Region> regions,
-          std::vector<River> rivers)
+          std::vector<River> rivers,
+          std::vector<Province> provinces)
         : m_boundingBox(std::move(boundingBox)),
           m_division(std::move(division)),
           m_regions(std::move(regions)),
-          m_rivers(std::move(rivers)) {}
+          m_rivers(std::move(rivers)),
+          m_provinces(std::move(provinces)) {}
 
     [[nodiscard]] const BoundingBox &boundingBox() const noexcept {
         return m_boundingBox;
@@ -37,11 +40,16 @@ public:
         return m_rivers;
     }
 
+    [[nodiscard]] const std::vector<Province> &provinces() const noexcept {
+        return m_provinces;
+    }
+
 private:
     BoundingBox m_boundingBox;
     WorldDivision m_division;
     std::vector<Region> m_regions;
     std::vector<River> m_rivers;
+    std::vector<Province> m_provinces;
 };
 
 } // namespace worldgen

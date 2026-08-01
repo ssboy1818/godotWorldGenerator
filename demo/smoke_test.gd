@@ -17,6 +17,10 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.river_minimum_source_elevation, 0.6))
     assert(is_equal_approx(settings.river_randomness, 0.25))
     assert(is_equal_approx(settings.river_elevation_tolerance, 0.03))
+    assert(is_equal_approx(settings.province_start_score, 10.0))
+    assert(is_equal_approx(settings.province_river_contribution, 5.0))
+    assert(is_equal_approx(settings.province_elevation_contribution, 10.0))
+    assert(is_equal_approx(settings.province_base_cost, 1.0))
     settings.bounds = Rect2(0.0, 0.0, 512.0, 512.0)
     settings.seed = 93
     settings.columns = 16
@@ -29,6 +33,10 @@ func _initialize() -> void:
     settings.river_minimum_source_elevation = 0.5
     settings.river_randomness = 0.35
     settings.river_elevation_tolerance = 0.03
+    settings.province_start_score = 10.0
+    settings.province_river_contribution = 5.0
+    settings.province_elevation_contribution = 10.0
+    settings.province_base_cost = 1.0
 
     var generator := VoronoiWorldGenerator.new()
     generator.settings = settings
@@ -48,6 +56,13 @@ func _initialize() -> void:
     assert(world.cell_vertex_offsets[-1] == world.vertices.size())
     assert(world.neighbor_offsets[-1] == world.neighbors.size())
     assert(world.river_offsets[-1] == world.river_vertices.size())
+    assert(world.province_count > 0)
+    assert(world.province_offsets.size() == world.province_count + 1)
+    assert(world.province_region_ids.size() == world.cell_count)
+    assert(world.province_seed_region_ids.size() == world.province_count)
+    assert(world.province_remaining_scores.size() == world.province_count)
+    assert(world.region_province_indices.size() == world.cell_count)
+    assert(world.province_offsets[-1] == world.cell_count)
     var river_region_edges := 0
     for river in world.cell_edge_rivers:
         assert(river >= -1 and river < world.river_count)
@@ -74,6 +89,24 @@ func _initialize() -> void:
                    == world.river_strengths[downstream_first])
     assert(linked_river_segments > 0)
 
+    var assigned_regions := PackedByteArray()
+    assigned_regions.resize(world.cell_count)
+    for province in world.province_count:
+        var first_region: int = world.province_offsets[province]
+        var after_last_region: int = world.province_offsets[province + 1]
+        assert(after_last_region > first_region)
+        assert(world.province_seed_region_ids[province]
+               == world.province_region_ids[first_region])
+        assert(world.province_remaining_scores[province] >= 0.0)
+        for offset in range(first_region, after_last_region):
+            var region: int = world.province_region_ids[offset]
+            assert(region >= 0 and region < world.cell_count)
+            assert(assigned_regions[region] == 0)
+            assert(world.region_province_indices[region] == province)
+            assigned_regions[region] = 1
+    for assigned in assigned_regions:
+        assert(assigned == 1)
+
     var repeated := generator.generate() as VoronoiWorldData
     assert(repeated != null)
     assert(repeated.sites == world.sites)
@@ -85,6 +118,11 @@ func _initialize() -> void:
     assert(repeated.river_offsets == world.river_offsets)
     assert(repeated.river_downstream_indices == world.river_downstream_indices)
     assert(repeated.cell_edge_rivers == world.cell_edge_rivers)
+    assert(repeated.province_region_ids == world.province_region_ids)
+    assert(repeated.province_offsets == world.province_offsets)
+    assert(repeated.province_seed_region_ids == world.province_seed_region_ids)
+    assert(repeated.province_remaining_scores == world.province_remaining_scores)
+    assert(repeated.region_province_indices == world.region_province_indices)
 
     var node := VoronoiWorld2D.new()
     node.settings = settings

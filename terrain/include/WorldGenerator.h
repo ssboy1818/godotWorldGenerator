@@ -28,6 +28,11 @@ struct WorldGenerationSettings {
     double riverMinimumSourceElevation{0.6};
     double riverRandomness{0.25};
     double riverElevationTolerance{0.03};
+
+    double provinceStartScore{10.0};
+    double provinceRiverContribution{5.0};
+    double provinceElevationContribution{10.0};
+    double provinceBaseCost{1.0};
 };
 
 class WorldGenerator {

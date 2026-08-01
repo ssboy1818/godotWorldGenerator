@@ -3,7 +3,8 @@
 Worldgen is a Godot 4.4 GDExtension backed by an engine-independent C++23 core.
 It synchronously generates a bounded Voronoi world with deterministic terrain
 elevation, land/water classification, cell adjacency, and rivers that follow
-Voronoi borders downhill from high inland vertices.
+Voronoi borders downhill from high inland vertices. Regions are also grouped into
+deterministic, contiguous provinces using configurable terrain and river costs.
 
 ## Build
 
@@ -73,6 +74,10 @@ settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
 settings.river_elevation_tolerance = 0.03
+settings.province_start_score = 10.0
+settings.province_river_contribution = 5.0
+settings.province_elevation_contribution = 10.0
+settings.province_base_cost = 1.0
 generator.settings = settings
 
 var world: VoronoiWorldData = generator.generate()
@@ -109,3 +114,25 @@ water are retained. A routing step may rise by at most
 `cell_edge_rivers` parallels the flattened `vertices` array. Entry `j` identifies
 the river on the polygon edge from `vertices[j]` to the next vertex of that cell,
 or is `-1`. Use `cell_vertex_offsets` to find each cell's edge range.
+
+Province generation runs after rivers. The lowest-ID unclaimed region becomes a
+seed with `province_start_score`; its province repeatedly claims the cheapest
+unclaimed region neighboring any current member. Crossing from region `a` to
+region `b` costs:
+
+```text
+province_base_cost
+    + province_elevation_contribution * abs(elevation[a] - elevation[b])
+    + province_river_contribution if their shared border carries a river
+```
+
+The seed itself is free. Growth stops when the frontier is empty or its cheapest
+claim exceeds the remaining score, then the next unclaimed region starts another
+province. Thus every region belongs to exactly one province; province indices are
+stable for fixed settings and generation seed.
+
+Province `i` owns the region IDs in
+`[province_offsets[i], province_offsets[i + 1])` of `province_region_ids`, in
+claim order with its seed first. `province_seed_region_ids` and
+`province_remaining_scores` contain one value per province, while
+`region_province_indices[region_id]` provides the inverse lookup.

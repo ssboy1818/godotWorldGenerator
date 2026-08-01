@@ -62,6 +62,18 @@ public:
     void setRiverElevationTolerance(double tolerance);
     [[nodiscard]] double riverElevationTolerance() const noexcept;
 
+    void setProvinceStartScore(double score);
+    [[nodiscard]] double provinceStartScore() const noexcept;
+
+    void setProvinceRiverContribution(double contribution);
+    [[nodiscard]] double provinceRiverContribution() const noexcept;
+
+    void setProvinceElevationContribution(double contribution);
+    [[nodiscard]] double provinceElevationContribution() const noexcept;
+
+    void setProvinceBaseCost(double cost);
+    [[nodiscard]] double provinceBaseCost() const noexcept;
+
 protected:
     static void _bind_methods();
 
@@ -82,6 +94,10 @@ private:
     double m_riverMinimumSourceElevation{0.6};
     double m_riverRandomness{0.25};
     double m_riverElevationTolerance{0.03};
+    double m_provinceStartScore{10.0};
+    double m_provinceRiverContribution{5.0};
+    double m_provinceElevationContribution{10.0};
+    double m_provinceBaseCost{1.0};
 };
 
 } // namespace worldgen

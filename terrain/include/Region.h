@@ -4,10 +4,15 @@
 #include "WorldDivision.h"
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
 namespace worldgen {
+
+using RegionId = std::uint32_t;
+inline constexpr auto INVALID_REGION_ID = std::numeric_limits<RegionId>::max();
 
 enum class RegionType {
     Water,
@@ -27,6 +32,10 @@ public:
 
     [[nodiscard]] CellId cell() const noexcept {
         return m_cell;
+    }
+
+    [[nodiscard]] RegionId id() const noexcept {
+        return static_cast<RegionId>(m_cell);
     }
 
     [[nodiscard]] double elevation() const noexcept {

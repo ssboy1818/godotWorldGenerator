@@ -73,6 +73,30 @@ void WorldgenSettings::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("get_river_elevation_tolerance"),
         &WorldgenSettings::riverElevationTolerance);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_start_score", "score"),
+        &WorldgenSettings::setProvinceStartScore);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_start_score"),
+        &WorldgenSettings::provinceStartScore);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_river_contribution", "contribution"),
+        &WorldgenSettings::setProvinceRiverContribution);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_river_contribution"),
+        &WorldgenSettings::provinceRiverContribution);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_elevation_contribution", "contribution"),
+        &WorldgenSettings::setProvinceElevationContribution);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_elevation_contribution"),
+        &WorldgenSettings::provinceElevationContribution);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_base_cost", "cost"),
+        &WorldgenSettings::setProvinceBaseCost);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_base_cost"),
+        &WorldgenSettings::provinceBaseCost);
 
     ADD_GROUP("World", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::RECT2, "bounds"),
@@ -156,6 +180,30 @@ void WorldgenSettings::_bind_methods() {
                                      "0,0.25,0.001,or_greater"),
                  "set_river_elevation_tolerance",
                  "get_river_elevation_tolerance");
+
+    ADD_GROUP("Provinces", "");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "province_start_score",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1000,0.01,or_greater"),
+                 "set_province_start_score", "get_province_start_score");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "province_river_contribution",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1000,0.01,or_greater"),
+                 "set_province_river_contribution",
+                 "get_province_river_contribution");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "province_elevation_contribution",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1000,0.01,or_greater"),
+                 "set_province_elevation_contribution",
+                 "get_province_elevation_contribution");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "province_base_cost",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1000,0.01,or_greater"),
+                 "set_province_base_cost", "get_province_base_cost");
 }
 
 void WorldgenSettings::setBounds(const godot::Rect2 &bounds) {
@@ -284,6 +332,38 @@ void WorldgenSettings::setRiverElevationTolerance(double tolerance) {
 
 double WorldgenSettings::riverElevationTolerance() const noexcept {
     return m_riverElevationTolerance;
+}
+
+void WorldgenSettings::setProvinceStartScore(double score) {
+    m_provinceStartScore = score;
+}
+
+double WorldgenSettings::provinceStartScore() const noexcept {
+    return m_provinceStartScore;
+}
+
+void WorldgenSettings::setProvinceRiverContribution(double contribution) {
+    m_provinceRiverContribution = contribution;
+}
+
+double WorldgenSettings::provinceRiverContribution() const noexcept {
+    return m_provinceRiverContribution;
+}
+
+void WorldgenSettings::setProvinceElevationContribution(double contribution) {
+    m_provinceElevationContribution = contribution;
+}
+
+double WorldgenSettings::provinceElevationContribution() const noexcept {
+    return m_provinceElevationContribution;
+}
+
+void WorldgenSettings::setProvinceBaseCost(double cost) {
+    m_provinceBaseCost = cost;
+}
+
+double WorldgenSettings::provinceBaseCost() const noexcept {
+    return m_provinceBaseCost;
 }
 
 } // namespace worldgen

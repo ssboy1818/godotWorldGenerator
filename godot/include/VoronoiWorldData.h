@@ -39,6 +39,12 @@ public:
     [[nodiscard]] godot::PackedInt32Array riverOffsets() const;
     [[nodiscard]] godot::PackedInt32Array riverDownstreamIndices() const;
     [[nodiscard]] godot::PackedInt32Array cellEdgeRivers() const;
+    [[nodiscard]] std::int64_t provinceCount() const noexcept;
+    [[nodiscard]] godot::PackedInt32Array provinceRegionIds() const;
+    [[nodiscard]] godot::PackedInt32Array provinceOffsets() const;
+    [[nodiscard]] godot::PackedInt32Array provinceSeedRegionIds() const;
+    [[nodiscard]] godot::PackedFloat64Array provinceRemainingScores() const;
+    [[nodiscard]] godot::PackedInt32Array regionProvinceIndices() const;
 
 protected:
     static void _bind_methods();
@@ -57,6 +63,11 @@ private:
     godot::PackedInt32Array m_riverOffsets;
     godot::PackedInt32Array m_riverDownstreamIndices;
     godot::PackedInt32Array m_cellEdgeRivers;
+    godot::PackedInt32Array m_provinceRegionIds;
+    godot::PackedInt32Array m_provinceOffsets;
+    godot::PackedInt32Array m_provinceSeedRegionIds;
+    godot::PackedFloat64Array m_provinceRemainingScores;
+    godot::PackedInt32Array m_regionProvinceIndices;
 
     void populate(const World &world);
 

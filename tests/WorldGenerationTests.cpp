@@ -29,6 +29,215 @@ bool pointsNear(Vector2d first, Vector2d second, double coordinateTolerance) {
     return (first - second).length() <= coordinateTolerance;
 }
 
+bool segmentsShareBoundary(Vector2d firstStart,
+                           Vector2d firstEnd,
+                           Vector2d secondStart,
+                           Vector2d secondEnd,
+                           double coordinateTolerance) {
+    const auto firstDirection = firstEnd - firstStart;
+    const auto secondDirection = secondEnd - secondStart;
+    const auto firstLength = firstDirection.length();
+    const auto secondLength = secondDirection.length();
+    if (firstLength <= coordinateTolerance
+        || secondLength <= coordinateTolerance) {
+        return false;
+    }
+
+    const Vector2d unit{firstDirection.x / firstLength,
+                        firstDirection.y / firstLength};
+    const auto perpendicularDistance = [&](Vector2d point) {
+        const auto relative = point - firstStart;
+        return std::abs(relative.x * unit.y - relative.y * unit.x);
+    };
+    if (perpendicularDistance(secondStart) > coordinateTolerance
+        || perpendicularDistance(secondEnd) > coordinateTolerance) {
+        return false;
+    }
+
+    const auto project = [&](Vector2d point) {
+        const auto relative = point - firstStart;
+        return relative.x * unit.x + relative.y * unit.y;
+    };
+    auto secondMinimum = project(secondStart);
+    auto secondMaximum = project(secondEnd);
+    if (secondMinimum > secondMaximum)
+        std::swap(secondMinimum, secondMaximum);
+    const auto overlap = std::min(firstLength, secondMaximum)
+                         - std::max(0.0, secondMinimum);
+    return overlap > coordinateTolerance;
+}
+
+bool sharedBoundaryHasRiver(const World &world,
+                            RegionId first,
+                            RegionId second,
+                            double coordinateTolerance) {
+    const auto edgeTouchesCell = [&](RegionId riverRegion, RegionId otherRegion) {
+        const auto &riverCell = world.division().cells.at(riverRegion);
+        const auto &region = world.regions().at(riverRegion);
+        const auto &otherCell = world.division().cells.at(otherRegion);
+        for (std::size_t edge = 0; edge < riverCell.vertices.size(); ++edge) {
+            if (!region.hasRiverAtEdge(edge))
+                continue;
+            const auto next = (edge + 1) % riverCell.vertices.size();
+            for (std::size_t otherEdge = 0;
+                 otherEdge < otherCell.vertices.size();
+                 ++otherEdge) {
+                const auto otherNext = (otherEdge + 1)
+                                       % otherCell.vertices.size();
+                if (segmentsShareBoundary(riverCell.vertices[edge],
+                                          riverCell.vertices[next],
+                                          otherCell.vertices[otherEdge],
+                                          otherCell.vertices[otherNext],
+                                          coordinateTolerance)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    return edgeTouchesCell(first, second) || edgeTouchesCell(second, first);
+}
+
+bool requireProvinceGrowth(const World &world,
+                           const WorldGenerationSettings &settings,
+                           const World *repeated = nullptr) {
+    const auto regionCount = world.regions().size();
+    require(!world.provinces().empty() || regionCount == 0,
+            "A non-empty world has no provinces.");
+    if (repeated != nullptr) {
+        require(world.provinces().size() == repeated->provinces().size(),
+                "Province counts are not deterministic.");
+    }
+
+    constexpr double coordinateTolerance = 1e-7;
+    std::vector<bool> assigned(regionCount, false);
+    auto assignedCount = std::size_t{0};
+    auto sawRiverFrontier = false;
+    for (std::size_t provinceIndex = 0;
+         provinceIndex < world.provinces().size();
+         ++provinceIndex) {
+        const auto &province = world.provinces()[provinceIndex];
+        require(!province.regionIds().empty(), "A province has no regions.");
+        require(province.seedRegion() == province.regionIds().front(),
+                "A province seed is not its first region.");
+
+        const auto firstUnassigned = std::ranges::find(assigned, false);
+        require(firstUnassigned != assigned.end(),
+                "A province was created after all regions were assigned.");
+        require(province.seedRegion()
+                    == static_cast<RegionId>(firstUnassigned - assigned.begin()),
+                "A province did not use the lowest unassigned region as its seed.");
+
+        if (repeated != nullptr) {
+            const auto &repeatedProvince = repeated->provinces()[provinceIndex];
+            require(province.seedRegion() == repeatedProvince.seedRegion(),
+                    "Province seeds are not deterministic.");
+            require(province.regionIds() == repeatedProvince.regionIds(),
+                    "Province memberships are not deterministic.");
+            require(province.remainingScore()
+                        == repeatedProvince.remainingScore(),
+                    "Province remaining scores are not deterministic.");
+        }
+
+        auto remainingScore = settings.provinceStartScore;
+        std::vector<RegionId> claimed;
+        claimed.reserve(province.regionIds().size());
+        for (const auto actualRegion : province.regionIds()) {
+            if (claimed.empty()) {
+                require(actualRegion == province.seedRegion(),
+                        "A province claim order does not begin with its seed.");
+                require(!assigned.at(actualRegion),
+                        "A province seed was already assigned.");
+                assigned[actualRegion] = true;
+                ++assignedCount;
+                claimed.push_back(actualRegion);
+                continue;
+            }
+
+            auto bestCost = std::numeric_limits<double>::infinity();
+            auto bestRegion = INVALID_REGION_ID;
+            auto bestSource = INVALID_REGION_ID;
+            for (const auto source : claimed) {
+                const auto &sourceCell = world.division().cells.at(source);
+                for (const auto neighbor : sourceCell.neighbors) {
+                    if (assigned.at(neighbor))
+                        continue;
+                    const auto crossesRiver = sharedBoundaryHasRiver(
+                        world,
+                        source,
+                        static_cast<RegionId>(neighbor),
+                        coordinateTolerance);
+                    sawRiverFrontier = sawRiverFrontier || crossesRiver;
+                    const auto elevationDifference = std::abs(
+                        world.regions().at(source).elevation()
+                        - world.regions().at(neighbor).elevation());
+                    const auto cost = settings.provinceBaseCost
+                                      + settings.provinceElevationContribution
+                                            * elevationDifference
+                                      + (crossesRiver
+                                             ? settings.provinceRiverContribution
+                                             : 0.0);
+                    const auto neighborRegion = static_cast<RegionId>(neighbor);
+                    if (cost < bestCost
+                        || (cost == bestCost
+                            && (neighborRegion < bestRegion
+                                || (neighborRegion == bestRegion
+                                    && source < bestSource)))) {
+                        bestCost = cost;
+                        bestRegion = neighborRegion;
+                        bestSource = source;
+                    }
+                }
+            }
+
+            require(bestRegion != INVALID_REGION_ID,
+                    "A province claimed a non-neighboring region.");
+            require(actualRegion == bestRegion,
+                    "A province did not claim its cheapest frontier region.");
+            require(bestCost <= remainingScore,
+                    "A province claimed a region it could not afford.");
+            remainingScore -= bestCost;
+            assigned[actualRegion] = true;
+            ++assignedCount;
+            claimed.push_back(actualRegion);
+        }
+
+        auto cheapestRemaining = std::numeric_limits<double>::infinity();
+        for (const auto source : claimed) {
+            for (const auto neighbor : world.division().cells.at(source).neighbors) {
+                if (assigned.at(neighbor))
+                    continue;
+                const auto crossesRiver = sharedBoundaryHasRiver(
+                    world,
+                    source,
+                    static_cast<RegionId>(neighbor),
+                    coordinateTolerance);
+                sawRiverFrontier = sawRiverFrontier || crossesRiver;
+                const auto elevationDifference = std::abs(
+                    world.regions().at(source).elevation()
+                    - world.regions().at(neighbor).elevation());
+                cheapestRemaining = std::min(
+                    cheapestRemaining,
+                    settings.provinceBaseCost
+                        + settings.provinceElevationContribution
+                              * elevationDifference
+                        + (crossesRiver
+                               ? settings.provinceRiverContribution
+                               : 0.0));
+            }
+        }
+        require(cheapestRemaining > remainingScore,
+                "A province stopped with an affordable frontier region.");
+        requireNear(province.remainingScore(),
+                    remainingScore,
+                    "A province stored an incorrect remaining score.");
+    }
+
+    require(assignedCount == regionCount,
+            "Provinces do not assign every region exactly once.");
+    return sawRiverFrontier;
+}
+
 bool isCellBoundarySegment(const World &world,
                            Vector2d first,
                            Vector2d second,
@@ -261,6 +470,90 @@ void testEdgeStrengthValidation() {
     }
 }
 
+void testProvinceBudgets() {
+    auto settings = WorldGenerationSettings{
+        .bounds = {{0.0, 0.0}, {150.0, 120.0}},
+        .seed = 417,
+        .columns = 5,
+        .rows = 4,
+        .jitter = 0.65,
+        .riverSourceCount = 0,
+        .provinceStartScore = 2.5,
+        .provinceRiverContribution = 0.0,
+        .provinceElevationContribution = 0.0,
+        .provinceBaseCost = 1.0,
+    };
+    const auto world = WorldGenerator{settings}.generate();
+    const auto repeated = WorldGenerator{settings}.generate();
+
+    requireProvinceGrowth(world, settings, &repeated);
+    for (const auto &province : world.provinces()) {
+        require(province.regionIds().size() <= 3,
+                "A province exceeded its fixed base-cost budget.");
+    }
+
+    settings.provinceStartScore = 0.0;
+    const auto noBudgetWorld = WorldGenerator{settings}.generate();
+    require(noBudgetWorld.provinces().size() == noBudgetWorld.regions().size(),
+            "Zero-score provinces claimed regions with a positive base cost.");
+    requireProvinceGrowth(noBudgetWorld, settings);
+
+    settings.provinceBaseCost = 0.0;
+    const auto freeWorld = WorldGenerator{settings}.generate();
+    require(freeWorld.provinces().size() == 1,
+            "Free claims did not combine a connected world into one province.");
+    requireProvinceGrowth(freeWorld, settings);
+}
+
+void testProvinceSettingsValidation() {
+    auto settings = WorldGenerationSettings{
+        .bounds = {{0.0, 0.0}, {10.0, 10.0}},
+    };
+    requireNear(settings.provinceStartScore,
+                10.0,
+                "The default province start score must be 10.");
+    requireNear(settings.provinceRiverContribution,
+                5.0,
+                "The default province river contribution must be 5.");
+    requireNear(settings.provinceElevationContribution,
+                10.0,
+                "The default province elevation contribution must be 10.");
+    requireNear(settings.provinceBaseCost,
+                1.0,
+                "The default province base cost must be 1.");
+
+    settings.provinceStartScore = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative province start score was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.provinceStartScore = 10.0;
+    settings.provinceRiverContribution = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative province river contribution was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.provinceRiverContribution = 5.0;
+    settings.provinceElevationContribution = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative province elevation contribution was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.provinceElevationContribution = 10.0;
+    settings.provinceBaseCost = std::numeric_limits<double>::infinity();
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A non-finite province base cost was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+}
+
 void testRivers() {
     const WorldGenerationSettings settings{
         .bounds = {{0.0, 0.0}, {512.0, 512.0}},
@@ -426,6 +719,9 @@ void testRivers() {
         }
     }
 
+    require(requireProvinceGrowth(world, settings, &repeated),
+            "The province fixture did not exercise a river frontier cost.");
+
     auto disabledSettings = settings;
     disabledSettings.riverSourceCount = 0;
     require(WorldGenerator{disabledSettings}.generate().rivers().empty(),
@@ -469,6 +765,8 @@ int main() {
         testSmoothEdgeDecay();
         testEffectiveSeaLevel();
         testEdgeStrengthValidation();
+        testProvinceBudgets();
+        testProvinceSettingsValidation();
         testRivers();
         testRiverSettingsValidation();
         std::cout << "World generation tests passed.\n";

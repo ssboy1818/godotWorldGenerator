@@ -3,6 +3,7 @@
 #include "Fortune.h"
 #include "JitteredGridSiteGenerator.h"
 #include "PerlinNoise.h"
+#include "ProvinceGenerator.h"
 #include "RiverGenerator.h"
 
 #include <cmath>
@@ -61,6 +62,32 @@ void validateSettings(const WorldGenerationSettings &settings) {
         || settings.riverElevationTolerance > 1.0) {
         throw std::invalid_argument(
             "River elevation tolerance must be between zero and one.");
+    }
+    if (!std::isfinite(settings.provinceStartScore)
+        || settings.provinceStartScore < 0.0) {
+        throw std::invalid_argument(
+            "Province start score must be finite and non-negative.");
+    }
+    if (!std::isfinite(settings.provinceRiverContribution)
+        || settings.provinceRiverContribution < 0.0) {
+        throw std::invalid_argument(
+            "Province river contribution must be finite and non-negative.");
+    }
+    if (!std::isfinite(settings.provinceElevationContribution)
+        || settings.provinceElevationContribution < 0.0) {
+        throw std::invalid_argument(
+            "Province elevation contribution must be finite and non-negative.");
+    }
+    if (!std::isfinite(settings.provinceBaseCost)
+        || settings.provinceBaseCost < 0.0) {
+        throw std::invalid_argument(
+            "Province base cost must be finite and non-negative.");
+    }
+    if (!std::isfinite(settings.provinceBaseCost
+                       + settings.provinceRiverContribution
+                       + settings.provinceElevationContribution)) {
+        throw std::invalid_argument(
+            "The maximum province claim cost must be finite.");
     }
 }
 
@@ -128,10 +155,20 @@ World WorldGenerator::generate() const {
                                  m_settings.riverRandomness,
                                  m_settings.riverElevationTolerance);
 
+    auto provinces = generateProvinces(
+        boundingBox,
+        division,
+        regions,
+        m_settings.provinceStartScore,
+        m_settings.provinceRiverContribution,
+        m_settings.provinceElevationContribution,
+        m_settings.provinceBaseCost);
+
     return World{boundingBox,
                  std::move(division),
                  std::move(regions),
-                 std::move(rivers)};
+                 std::move(rivers),
+                 std::move(provinces)};
 }
 
 } // namespace worldgen
