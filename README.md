@@ -69,7 +69,7 @@ settings.bounds = Rect2(0, 0, 2048, 2048)
 settings.seed = 42
 settings.columns = 64
 settings.rows = 64
-settings.river_count = 12
+settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
 generator.settings = settings
@@ -95,5 +95,9 @@ cell `i` uses the half-open ranges `[offsets[i], offsets[i + 1])` in the shared
 `VoronoiWorldData.REGION_TYPE_WATER` and `VoronoiWorldData.REGION_TYPE_LAND`.
 
 River `i` occupies `[river_offsets[i], river_offsets[i + 1])` in the flattened
-`river_vertices` and `river_strengths` arrays. Strength starts at `1.0` and grows
-downstream, allowing a renderer to vary river width per node.
+`river_vertices` and `river_strengths` arrays. Each source contributes unit flow;
+strengths are added where tributaries meet. `river_downstream_indices[i]` points
+to the shared segment below the confluence, or is `-1` at a mouth. This stores a
+merged downstream channel once while allowing a renderer to vary width by flow.
+`river_source_count` limits selected headwaters; the resulting `river_count` is
+the number of segments and may differ because the network is split at confluences.

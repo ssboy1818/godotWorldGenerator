@@ -37,6 +37,7 @@ public:
     [[nodiscard]] godot::PackedVector2Array riverVertices() const;
     [[nodiscard]] godot::PackedFloat64Array riverStrengths() const;
     [[nodiscard]] godot::PackedInt32Array riverOffsets() const;
+    [[nodiscard]] godot::PackedInt32Array riverDownstreamIndices() const;
 
 protected:
     static void _bind_methods();
@@ -53,6 +54,7 @@ private:
     godot::PackedVector2Array m_riverVertices;
     godot::PackedFloat64Array m_riverStrengths;
     godot::PackedInt32Array m_riverOffsets;
+    godot::PackedInt32Array m_riverDownstreamIndices;
 
     void populate(const World &world);
 

@@ -17,7 +17,7 @@ namespace worldgen {
     const WorldDivision &division,
     std::span<const Region> regions,
     std::uint64_t seed,
-    std::size_t riverCount,
+    std::size_t riverSourceCount,
     double minimumSourceElevation,
     double randomness);
 

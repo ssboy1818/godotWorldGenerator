@@ -27,8 +27,9 @@ world or provide a complete visualization demo.
 5. Sample multi-octave Perlin noise at each site's position.
 6. Raise the effective sea level near the world border using a smooth edge-decay
    mask and build one classified `Region` per polygon.
-7. Canonicalize shared polygon vertices into a boundary graph and trace seeded
-   rivers downhill from high inland local maxima.
+7. Canonicalize shared polygon vertices into a boundary graph, assign one seeded
+   downhill direction per vertex, accumulate flow at confluences, and split the
+   network into linked river segments.
 8. Return an immutable core `World` containing the bounds, diagram, regions, and
    rivers.
 9. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
@@ -103,8 +104,8 @@ The domain-level orchestration layer.
   must be supplied explicitly.
 - `WorldGenerator` owns an immutable copy of `WorldGenerationSettings`, validates
   it, invokes site, Voronoi, and noise generation, and assembles a `World`.
-- `RiverNode` stores a polygon vertex and downstream strength; `River` is an
-  ordered vector of those nodes.
+- `RiverNode` stores a polygon vertex and accumulated flow strength. `River`
+  stores an ordered node vector plus the ID of its shared downstream segment.
 - `World` owns the generated diagram, regions, and rivers.
 - `Region` references a polygon by ID and stores elevation plus land/water type.
 
@@ -212,7 +213,8 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
 - sea level, edge-decay ratio/strength, noise parameters, and river controls;
 - per-cell site position, ordered polygon vertices, elevation, and land/water type;
 - stable cell indices and neighboring cell indices;
-- ordered river vertices, per-node strengths, and river offsets;
+- ordered river vertices, per-node strengths, river offsets, and downstream
+  segment indices;
 - clear validation errors suitable for both GDScript and C++ callers.
 
 Use Godot containers at the binding boundary (`PackedVector2Array`, packed numeric
@@ -290,7 +292,7 @@ Do not describe the following as completed:
 - a complete linked DCEL boundary for every clipped polygon;
 - documented handling of duplicate sites and all geometric degeneracies;
 - chunking, streaming, level of detail, erosion, climate, biomes, full hydrology
-  such as drainage basins and tributary merging, roads, settlements, or
+  such as basin-wide runoff, lakes, and floodplains, roads, settlements, or
   serialization;
 - stable performance/memory guarantees for production-sized worlds;
 - a polygon-rendering Godot demo and supported-platform release packages.

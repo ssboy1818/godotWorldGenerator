@@ -110,7 +110,7 @@ World WorldGenerator::generate() const {
                                  division,
                                  regions,
                                  m_settings.seed,
-                                 m_settings.riverCount,
+                                 m_settings.riverSourceCount,
                                  m_settings.riverMinimumSourceElevation,
                                  m_settings.riverRandomness);
 

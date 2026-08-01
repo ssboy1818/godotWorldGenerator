@@ -50,8 +50,8 @@ public:
     void setNoisePersistence(double persistence);
     [[nodiscard]] double noisePersistence() const noexcept;
 
-    void setRiverCount(std::int64_t count);
-    [[nodiscard]] std::int64_t riverCount() const noexcept;
+    void setRiverSourceCount(std::int64_t count);
+    [[nodiscard]] std::int64_t riverSourceCount() const noexcept;
 
     void setRiverMinimumSourceElevation(double elevation);
     [[nodiscard]] double riverMinimumSourceElevation() const noexcept;
@@ -75,7 +75,7 @@ private:
     double m_noiseFrequency{0.01};
     double m_noiseLacunarity{2.0};
     double m_noisePersistence{0.5};
-    std::int64_t m_riverCount{12};
+    std::int64_t m_riverSourceCount{12};
     double m_riverMinimumSourceElevation{0.6};
     double m_riverRandomness{0.25};
 };

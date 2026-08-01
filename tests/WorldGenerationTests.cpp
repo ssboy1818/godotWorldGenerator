@@ -1,6 +1,7 @@
 #include "PerlinNoise.h"
 #include "WorldGenerator.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -218,8 +219,8 @@ void testRivers() {
         .noiseFrequency = 0.01,
         .noiseLacunarity = 2.0,
         .noisePersistence = 0.5,
-        .riverCount = 6,
-        .riverMinimumSourceElevation = 0.6,
+        .riverSourceCount = 24,
+        .riverMinimumSourceElevation = 0.5,
         .riverRandomness = 0.35,
     };
     const auto world = WorldGenerator{settings}.generate();
@@ -227,39 +228,60 @@ void testRivers() {
     constexpr double coordinateTolerance = 1e-7;
 
     require(!world.rivers().empty(), "River generation did not produce any rivers.");
-    require(world.rivers().size() <= settings.riverCount,
-            "River generation exceeded the requested river count.");
     require(world.rivers().size() == repeated.rivers().size(),
             "River counts are not deterministic.");
+
+    std::vector<std::size_t> incomingSegments(world.rivers().size(), 0);
+    for (const auto &river : world.rivers()) {
+        if (river.downstreamRiver != INVALID_RIVER_ID) {
+            require(river.downstreamRiver < world.rivers().size(),
+                    "A river references an invalid downstream segment.");
+            ++incomingSegments[river.downstreamRiver];
+        }
+    }
+
+    auto headwaterSegments = std::size_t{0};
+    auto hasConfluence = false;
+    std::vector<std::pair<Vector2d, Vector2d>> channelEdges;
 
     for (std::size_t riverIndex = 0;
          riverIndex < world.rivers().size();
          ++riverIndex) {
         const auto &river = world.rivers()[riverIndex];
         const auto &repeatedRiver = repeated.rivers()[riverIndex];
-        require(river.size() >= 2, "A river has fewer than two nodes.");
-        require(riverVertexElevation(world,
-                                     river.front().vertex,
-                                     coordinateTolerance)
-                    >= settings.riverMinimumSourceElevation,
-                "A river starts below the minimum source elevation.");
-        require(river.size() == repeatedRiver.size(),
+        require(river.nodes.size() >= 2, "A river has fewer than two nodes.");
+        require(river.nodes.size() == repeatedRiver.nodes.size(),
                 "River node counts are not deterministic.");
+        require(river.downstreamRiver == repeatedRiver.downstreamRiver,
+                "Downstream river links are not deterministic.");
 
-        for (std::size_t nodeIndex = 0; nodeIndex < river.size(); ++nodeIndex) {
-            const auto &node = river[nodeIndex];
-            const auto &repeatedNode = repeatedRiver[nodeIndex];
+        if (incomingSegments[riverIndex] == 0) {
+            ++headwaterSegments;
+            require(riverVertexElevation(world,
+                                         river.nodes.front().vertex,
+                                         coordinateTolerance)
+                        >= settings.riverMinimumSourceElevation,
+                    "A river starts below the minimum source elevation.");
+            requireNear(river.nodes.front().strength,
+                        1.0,
+                        "A headwater river must start with unit strength.");
+        }
+
+        for (std::size_t nodeIndex = 0;
+             nodeIndex < river.nodes.size();
+             ++nodeIndex) {
+            const auto &node = river.nodes[nodeIndex];
+            const auto &repeatedNode = repeatedRiver.nodes[nodeIndex];
             require(node.vertex == repeatedNode.vertex,
                     "River vertices are not deterministic.");
             require(node.strength == repeatedNode.strength,
                     "River strengths are not deterministic.");
-            requireNear(node.strength,
-                        static_cast<double>(nodeIndex + 1),
-                        "River strength does not accumulate downstream.");
 
             if (nodeIndex == 0)
                 continue;
-            const auto &previous = river[nodeIndex - 1];
+            const auto &previous = river.nodes[nodeIndex - 1];
+            require(node.strength >= previous.strength,
+                    "River strength decreases downstream.");
             require(isCellBoundarySegment(world,
                                           previous.vertex,
                                           node.vertex,
@@ -272,11 +294,55 @@ void testRivers() {
                                                previous.vertex,
                                                coordinateTolerance),
                     "A river does not flow toward lower terrain.");
+
+            const auto edge = std::pair{previous.vertex, node.vertex};
+            require(std::ranges::find(channelEdges, edge) == channelEdges.end(),
+                    "A shared downstream river edge was stored more than once.");
+            channelEdges.push_back(edge);
         }
+
+        if (river.downstreamRiver == INVALID_RIVER_ID)
+            continue;
+
+        const auto &downstream = world.rivers()[river.downstreamRiver];
+        require(river.nodes.back().vertex == downstream.nodes.front().vertex,
+                "Linked river segments do not meet at their confluence.");
+        require(river.nodes.back().strength == downstream.nodes.front().strength,
+                "Linked river segments disagree about confluence strength.");
+
+        auto linked = river.downstreamRiver;
+        auto remaining = world.rivers().size();
+        while (linked != INVALID_RIVER_ID && remaining > 0) {
+            linked = world.rivers()[linked].downstreamRiver;
+            --remaining;
+        }
+        require(remaining > 0 || linked == INVALID_RIVER_ID,
+                "Downstream river links contain a cycle.");
     }
 
+    require(headwaterSegments <= settings.riverSourceCount,
+            "River generation exceeded the requested headwater count.");
+    for (std::size_t downstreamId = 0;
+         downstreamId < world.rivers().size();
+         ++downstreamId) {
+        if (incomingSegments[downstreamId] < 2)
+            continue;
+
+        hasConfluence = true;
+        auto incomingStrength = 0.0;
+        for (const auto &river : world.rivers()) {
+            if (river.downstreamRiver == downstreamId) {
+                incomingStrength += river.nodes[river.nodes.size() - 2].strength;
+            }
+        }
+        requireNear(world.rivers()[downstreamId].nodes.front().strength,
+                    incomingStrength,
+                    "Confluence strength is not the sum of incoming rivers.");
+    }
+    require(hasConfluence, "The river fixture did not exercise a confluence.");
+
     auto disabledSettings = settings;
-    disabledSettings.riverCount = 0;
+    disabledSettings.riverSourceCount = 0;
     require(WorldGenerator{disabledSettings}.generate().rivers().empty(),
             "A zero river count did not disable river generation.");
 }

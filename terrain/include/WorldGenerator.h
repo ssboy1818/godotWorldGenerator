@@ -24,7 +24,7 @@ struct WorldGenerationSettings {
     double noiseLacunarity{2.0};
     double noisePersistence{0.5};
 
-    std::size_t riverCount{12};
+    std::size_t riverSourceCount{12};
     double riverMinimumSourceElevation{0.6};
     double riverRandomness{0.25};
 };

@@ -53,10 +53,10 @@ void WorldgenSettings::_bind_methods() {
                                 &WorldgenSettings::setNoisePersistence);
     godot::ClassDB::bind_method(godot::D_METHOD("get_noise_persistence"),
                                 &WorldgenSettings::noisePersistence);
-    godot::ClassDB::bind_method(godot::D_METHOD("set_river_count", "count"),
-                                &WorldgenSettings::setRiverCount);
-    godot::ClassDB::bind_method(godot::D_METHOD("get_river_count"),
-                                &WorldgenSettings::riverCount);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_river_source_count", "count"),
+                                &WorldgenSettings::setRiverSourceCount);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_source_count"),
+                                &WorldgenSettings::riverSourceCount);
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_river_minimum_source_elevation", "elevation"),
         &WorldgenSettings::setRiverMinimumSourceElevation);
@@ -129,10 +129,10 @@ void WorldgenSettings::_bind_methods() {
 
     ADD_GROUP("Rivers", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
-                                     "river_count",
+                                     "river_source_count",
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1024,1,or_greater"),
-                 "set_river_count", "get_river_count");
+                 "set_river_source_count", "get_river_source_count");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
                                      "river_minimum_source_elevation",
                                      godot::PROPERTY_HINT_RANGE,
@@ -242,12 +242,12 @@ double WorldgenSettings::noisePersistence() const noexcept {
     return m_noisePersistence;
 }
 
-void WorldgenSettings::setRiverCount(std::int64_t count) {
-    m_riverCount = count;
+void WorldgenSettings::setRiverSourceCount(std::int64_t count) {
+    m_riverSourceCount = count;
 }
 
-std::int64_t WorldgenSettings::riverCount() const noexcept {
-    return m_riverCount;
+std::int64_t WorldgenSettings::riverSourceCount() const noexcept {
+    return m_riverSourceCount;
 }
 
 void WorldgenSettings::setRiverMinimumSourceElevation(double elevation) {

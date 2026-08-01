@@ -71,6 +71,8 @@ void VoronoiWorldData::_bind_methods() {
                                 &VoronoiWorldData::riverStrengths);
     godot::ClassDB::bind_method(godot::D_METHOD("get_river_offsets"),
                                 &VoronoiWorldData::riverOffsets);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_river_downstream_indices"),
+                                &VoronoiWorldData::riverDownstreamIndices);
 
     BIND_CONSTANT(REGION_TYPE_WATER);
     BIND_CONSTANT(REGION_TYPE_LAND);
@@ -155,6 +157,12 @@ void VoronoiWorldData::_bind_methods() {
                                      "",
                                      readOnly),
                  "", "get_river_offsets");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "river_downstream_indices",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_river_downstream_indices");
 }
 
 std::int64_t VoronoiWorldData::cellCount() const noexcept {
@@ -207,6 +215,10 @@ godot::PackedFloat64Array VoronoiWorldData::riverStrengths() const {
 
 godot::PackedInt32Array VoronoiWorldData::riverOffsets() const {
     return m_riverOffsets;
+}
+
+godot::PackedInt32Array VoronoiWorldData::riverDownstreamIndices() const {
+    return m_riverDownstreamIndices;
 }
 
 void VoronoiWorldData::populate(const World &world) {
@@ -295,10 +307,10 @@ void VoronoiWorldData::populate(const World &world) {
 
     std::size_t riverNodeCount = 0;
     for (const auto &river : rivers) {
-        if (river.size() < 2)
+        if (river.nodes.size() < 2)
             throw std::logic_error("A generated river must have at least two nodes.");
         addPackedCount(riverNodeCount,
-                       river.size(),
+                       river.nodes.size(),
                        "The generated world has too many river nodes for packed offsets.");
     }
 
@@ -311,14 +323,19 @@ void VoronoiWorldData::populate(const World &world) {
     resizePacked(m_riverOffsets,
                  rivers.size() + 1,
                  "Unable to allocate the river offsets.");
+    resizePacked(m_riverDownstreamIndices,
+                 rivers.size(),
+                 "Unable to allocate the downstream river index array.");
 
     auto *riverVertices = m_riverVertices.ptrw();
     auto *riverStrengths = m_riverStrengths.ptrw();
     auto *riverOffsets = m_riverOffsets.ptrw();
+    auto *riverDownstreamIndices = m_riverDownstreamIndices.ptrw();
     std::size_t riverNodeOffset = 0;
     for (std::size_t riverIndex = 0; riverIndex < rivers.size(); ++riverIndex) {
+        const auto &river = rivers[riverIndex];
         riverOffsets[riverIndex] = static_cast<std::int32_t>(riverNodeOffset);
-        for (const auto &node : rivers[riverIndex]) {
+        for (const auto &node : river.nodes) {
             if (!boundingBox.contains(node.vertex)
                 || !std::isfinite(node.strength) || node.strength <= 0.0) {
                 throw std::logic_error("A generated river contains an invalid node.");
@@ -327,6 +344,22 @@ void VoronoiWorldData::populate(const World &world) {
             riverStrengths[riverNodeOffset] = node.strength;
             ++riverNodeOffset;
         }
+
+        if (river.downstreamRiver == INVALID_RIVER_ID) {
+            riverDownstreamIndices[riverIndex] = -1;
+            continue;
+        }
+        if (river.downstreamRiver >= rivers.size()
+            || river.downstreamRiver == riverIndex) {
+            throw std::logic_error("A generated river has an invalid downstream river.");
+        }
+        const auto &downstream = rivers[river.downstreamRiver];
+        if (river.nodes.back().vertex != downstream.nodes.front().vertex) {
+            throw std::logic_error(
+                "Linked river segments do not meet at a shared vertex.");
+        }
+        riverDownstreamIndices[riverIndex] = static_cast<std::int32_t>(
+            river.downstreamRiver);
     }
     riverOffsets[rivers.size()] = static_cast<std::int32_t>(riverNodeOffset);
 }
