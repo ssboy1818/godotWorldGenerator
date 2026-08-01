@@ -5,9 +5,9 @@
 Worldgen is a Godot 4 GDExtension that procedurally generates a
 bounded two-dimensional world and partitions it into Voronoi cells. Each cell is a
 gameplay region with geometry and generated properties such as elevation and
-land/water classification. Godot can request a seeded world, inspect its cells and
-their relationships, and use the result to build
-meshes, maps, navigation, simulation, or editor previews.
+land/water classification, temperature, humidity, and vegetation. Godot can
+request a seeded world, inspect its cells and their relationships, and use the
+result to build meshes, maps, navigation, simulation, or editor previews.
 
 The repository contains engine-independent C++ core libraries and a thin Godot 4.4
 binding layer. The binding registers settings, synchronous generation, immutable
@@ -25,20 +25,25 @@ world or provide a complete visualization demo.
 4. Clip/finalize every cell against the world bounds and store its ordered polygon
    vertices in `Polygon::vertices`.
 5. Sample multi-octave Perlin noise at each site's position.
-6. Raise the effective sea level near the world border using a smooth edge-decay
+6. Sample latitude-based temperature and independent, domain-separated humidity
+   and vegetation noise at each site's position.
+7. Raise the effective sea level near the world border using a smooth edge-decay
    mask and build one classified `Region` per polygon. Record high land regions
    as possible river sources during this pass.
-7. Canonicalize shared polygon vertices into a boundary graph, route reachable
+8. Canonicalize shared polygon vertices into a boundary graph, route reachable
    candidates toward water with a bounded elevation tolerance, accumulate flow at
    confluences, split the network into linked river segments, and annotate the
    corresponding region edge indices.
-8. Return an immutable core `World` containing the bounds, diagram, regions, and
-   rivers.
-9. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
+9. Grow contiguous provinces from unclaimed region seeds using elevation, river,
+   and base claim costs, and assign every region a province ID.
+10. Return an immutable core `World` containing the bounds, diagram, regions,
+    rivers, and provinces.
+11. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.
 
 The generator is deterministic when its settings are fixed. A single explicit
-`WorldGenerationSettings::seed` controls jittered site placement, terrain noise,
-and river routing; generation does not depend on mutable global random state.
+`WorldGenerationSettings::seed` controls jittered site placement, terrain and
+climate noise, and river routing; generation does not depend on mutable global
+random state.
 
 ## Repository layout and ownership
 
@@ -96,6 +101,20 @@ Procedural elevation functions.
 Noise functions receive their seed explicitly. Avoid introducing global
 configuration state, especially before adding concurrent generation.
 
+### `climate/`
+
+Deterministic region climate sampling.
+
+- `ClimateGenerator` owns validated temperature, coefficient, seed, and shared
+  noise-shape settings for one world.
+- Temperature interpolates from the equator at the vertical center to equal pole
+  temperatures at the top and bottom bounds.
+- Humidity and vegetation use independent seed domains and normalized fBm noise;
+  their coefficients scale and clamp results to `[0, 1]`.
+
+Climate code depends only on geometry and noise and must remain independent from
+terrain domain objects and Godot.
+
 ### `terrain/`
 
 The domain-level orchestration layer.
@@ -105,23 +124,27 @@ The domain-level orchestration layer.
   `columns` and `rows` must be positive; `jitter` must be in `[0, 1]`; and its seed
   must be supplied explicitly.
 - `WorldGenerator` owns an immutable copy of `WorldGenerationSettings`, validates
-  it, invokes site, Voronoi, and noise generation, and assembles a `World`.
+  it, invokes site, Voronoi, noise, climate, river, and province generation, and
+  assembles a `World`.
 - `RiverNode` stores a polygon vertex and accumulated flow strength. `River`
   stores an ordered node vector plus the ID of its shared downstream segment.
-- `World` owns the generated diagram, regions, and rivers.
-- `Region` references a polygon by ID and stores elevation, land/water type, and
-  one optional river ID per ordered polygon edge.
+- `World` owns the generated diagram, regions, rivers, and provinces.
+- `Region` references a polygon by ID and stores elevation, land/water type,
+  temperature, humidity, vegetation, province ID, and one optional river ID per
+  ordered polygon edge.
+- `Province` stores an ordered union of region IDs, its seed, and remaining claim
+  score.
 
 The dependency direction is intentional:
 
 ```text
-geometry <- voronoi ----\
-    ^                     >- terrain <- Godot bindings
-    +------- noise ------/
+geometry <- voronoi --------\
+    ^                         >- terrain <- Godot bindings
+    +-- noise <- climate ----/
 ```
 
 Keep the core independent from Godot. Bindings depend on these libraries and
-convert their values at the boundary; geometry, Voronoi, noise, and
+convert their values at the boundary; geometry, Voronoi, noise, climate, and
 terrain code must not depend on Godot headers or engine object lifetimes.
 
 ### `godot/`
@@ -171,9 +194,9 @@ cmake --build build-release --parallel
 ```
 
 `demo/smoke_test.gd` provides an engine-level registration, packed-data, and
-determinism smoke test. There is not yet a C++ unit-test target or automated CI;
-continue adding focused coverage rather than treating a successful shared-library
-build as sufficient behavioral validation.
+determinism smoke test. Focused C++ test targets cover current generation behavior,
+but there is not yet automated CI; continue adding coverage rather than treating a
+successful shared-library build as sufficient behavioral validation.
 
 When changing generation code, verify at least:
 
@@ -197,8 +220,8 @@ rewriting the algorithms in Godot-specific types.
 
 Recommended layers:
 
-1. **Core libraries:** the existing `geometry`, `voronoi`, `noise`, and `terrain`
-   targets, with no Godot dependency.
+1. **Core libraries:** the existing `geometry`, `voronoi`, `noise`, `climate`, and
+   `terrain` targets, with no Godot dependency.
 2. **GDExtension bindings:** registration/initialization plus Godot-facing classes
    that translate settings and generated results. This initial layer exists.
 3. **Packaging:** the native library, `.gdextension` file, platform-specific build
@@ -213,9 +236,10 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
 - bounds or world size;
 - site columns/rows or another site-placement strategy;
 - jitter and all random seeds;
-- sea level, edge-decay ratio/strength, noise parameters, and river source/routing
-  controls;
-- per-cell site position, ordered polygon vertices, elevation, and land/water type;
+- sea level, edge-decay ratio/strength, noise parameters, climate coefficients and
+  temperatures, and river source/routing controls;
+- per-cell site position, ordered polygon vertices, elevation, temperature,
+  humidity, vegetation, and land/water type;
 - stable cell indices and neighboring cell indices;
 - ordered river vertices, per-node strengths, river offsets, and downstream
   segment indices;
@@ -296,9 +320,9 @@ Do not describe the following as completed:
 - comprehensive automated tests and CI;
 - a complete linked DCEL boundary for every clipped polygon;
 - documented handling of duplicate sites and all geometric degeneracies;
-- chunking, streaming, level of detail, erosion, climate, biomes, full hydrology
-  such as basin-wide runoff, lakes, and floodplains, roads, settlements, or
-  serialization;
+- chunking, streaming, level of detail, erosion, advanced climate simulation,
+  biomes, full hydrology such as basin-wide runoff, lakes, and floodplains, roads,
+  settlements, or serialization;
 - stable performance/memory guarantees for production-sized worlds;
 - a polygon-rendering Godot demo and supported-platform release packages.
 

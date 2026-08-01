@@ -10,3 +10,16 @@ target_link_libraries(worldgen_generation_tests
 target_compile_features(worldgen_generation_tests PRIVATE cxx_std_23)
 
 add_test(NAME worldgen_generation_tests COMMAND worldgen_generation_tests)
+
+add_executable(worldgen_climate_tests
+    ClimateTests.cpp
+)
+
+target_link_libraries(worldgen_climate_tests
+    PRIVATE
+        worldgen::climate
+)
+
+target_compile_features(worldgen_climate_tests PRIVATE cxx_std_23)
+
+add_test(NAME worldgen_climate_tests COMMAND worldgen_climate_tests)

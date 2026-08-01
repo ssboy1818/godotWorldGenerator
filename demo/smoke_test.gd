@@ -21,6 +21,10 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.province_river_contribution, 5.0))
     assert(is_equal_approx(settings.province_elevation_contribution, 10.0))
     assert(is_equal_approx(settings.province_base_cost, 1.0))
+    assert(is_equal_approx(settings.equator_temperature, 30.0))
+    assert(is_equal_approx(settings.pole_temperature, -20.0))
+    assert(is_equal_approx(settings.vegetation_coefficient, 1.0))
+    assert(is_equal_approx(settings.humidity_coefficient, 1.0))
     settings.bounds = Rect2(0.0, 0.0, 512.0, 512.0)
     settings.seed = 93
     settings.columns = 16
@@ -29,6 +33,10 @@ func _initialize() -> void:
     settings.sea_level = 0.3
     settings.edge_decay_ratio = Vector2(0.1, 0.1)
     settings.edge_strength = 0.2
+    settings.equator_temperature = 35.0
+    settings.pole_temperature = -25.0
+    settings.vegetation_coefficient = 1.25
+    settings.humidity_coefficient = 0.8
     settings.river_source_count = 24
     settings.river_minimum_source_elevation = 0.5
     settings.river_randomness = 0.35
@@ -47,6 +55,9 @@ func _initialize() -> void:
     assert(world.cell_vertex_offsets.size() == world.cell_count + 1)
     assert(world.neighbor_offsets.size() == world.cell_count + 1)
     assert(world.elevations.size() == world.cell_count)
+    assert(world.temperatures.size() == world.cell_count)
+    assert(world.humidities.size() == world.cell_count)
+    assert(world.vegetations.size() == world.cell_count)
     assert(world.region_types.size() == world.cell_count)
     assert(world.river_count > 0)
     assert(world.river_offsets.size() == world.river_count + 1)
@@ -63,6 +74,13 @@ func _initialize() -> void:
     assert(world.province_remaining_scores.size() == world.province_count)
     assert(world.region_province_indices.size() == world.cell_count)
     assert(world.province_offsets[-1] == world.cell_count)
+    for region in world.cell_count:
+        assert(world.temperatures[region] >= settings.pole_temperature)
+        assert(world.temperatures[region] <= settings.equator_temperature)
+        assert(world.humidities[region] >= 0.0)
+        assert(world.humidities[region] <= 1.0)
+        assert(world.vegetations[region] >= 0.0)
+        assert(world.vegetations[region] <= 1.0)
     var river_region_edges := 0
     for river in world.cell_edge_rivers:
         assert(river >= -1 and river < world.river_count)
@@ -112,6 +130,9 @@ func _initialize() -> void:
     assert(repeated.sites == world.sites)
     assert(repeated.vertices == world.vertices)
     assert(repeated.elevations == world.elevations)
+    assert(repeated.temperatures == world.temperatures)
+    assert(repeated.humidities == world.humidities)
+    assert(repeated.vegetations == world.vegetations)
     assert(repeated.region_types == world.region_types)
     assert(repeated.river_vertices == world.river_vertices)
     assert(repeated.river_strengths == world.river_strengths)

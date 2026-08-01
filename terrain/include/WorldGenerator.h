@@ -24,6 +24,11 @@ struct WorldGenerationSettings {
     double noiseLacunarity{2.0};
     double noisePersistence{0.5};
 
+    double equatorTemperature{30.0};
+    double poleTemperature{-20.0};
+    double vegetationCoefficient{1.0};
+    double humidityCoefficient{1.0};
+
     std::size_t riverSourceCount{12};
     double riverMinimumSourceElevation{0.6};
     double riverRandomness{0.25};

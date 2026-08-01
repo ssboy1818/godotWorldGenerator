@@ -16,6 +16,7 @@ set(WORLDGEN_GODOT_PROJECT_DIR
 add_subdirectory(geometry)
 add_subdirectory(voronoi)
 add_subdirectory(noise)
+add_subdirectory(climate)
 add_subdirectory(terrain)
 
 include(CTest)

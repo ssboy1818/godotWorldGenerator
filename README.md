@@ -5,6 +5,8 @@ It synchronously generates a bounded Voronoi world with deterministic terrain
 elevation, land/water classification, cell adjacency, and rivers that follow
 Voronoi borders downhill from high inland vertices. Regions are also grouped into
 deterministic, contiguous provinces using configurable terrain and river costs.
+An independent climate layer adds latitude-based temperature plus seeded humidity
+and vegetation fields.
 
 ## Build
 
@@ -70,6 +72,10 @@ settings.bounds = Rect2(0, 0, 2048, 2048)
 settings.seed = 42
 settings.columns = 64
 settings.rows = 64
+settings.equator_temperature = 30.0
+settings.pole_temperature = -20.0
+settings.vegetation_coefficient = 1.0
+settings.humidity_coefficient = 1.0
 settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
@@ -94,11 +100,20 @@ for cell in world.cell_count:
     var cell_neighbors := world.neighbors.slice(first_neighbor, after_last_neighbor)
 ```
 
-`sites`, `elevations`, and `region_types` contain one entry per cell.
+`sites`, `elevations`, `temperatures`, `humidities`, `vegetations`, and
+`region_types` contain one entry per cell.
 `cell_vertex_offsets` and `neighbor_offsets` contain `cell_count + 1` entries, so
 cell `i` uses the half-open ranges `[offsets[i], offsets[i + 1])` in the shared
 `vertices` and `neighbors` arrays. Region type constants are available as
 `VoronoiWorldData.REGION_TYPE_WATER` and `VoronoiWorldData.REGION_TYPE_LAND`.
+
+Climate values are sampled at each cell's site position, the same position used
+for elevation. Temperature interpolates linearly from `equator_temperature` at
+the vertical center of the bounds to `pole_temperature` at both the top and
+bottom. Both temperatures must be in `[-50, 50]`, and the pole cannot be warmer
+than the equator. Humidity and vegetation use independent deterministic fBm noise
+domains derived from the world seed and the shared noise octave/frequency
+settings. Their coefficients are in `[0, 2]`; results are clamped to `[0, 1]`.
 
 River `i` occupies `[river_offsets[i], river_offsets[i + 1])` in the flattened
 `river_vertices` and `river_strengths` arrays. Each source contributes unit flow;

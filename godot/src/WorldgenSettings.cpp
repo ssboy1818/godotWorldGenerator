@@ -53,6 +53,30 @@ void WorldgenSettings::_bind_methods() {
                                 &WorldgenSettings::setNoisePersistence);
     godot::ClassDB::bind_method(godot::D_METHOD("get_noise_persistence"),
                                 &WorldgenSettings::noisePersistence);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_equator_temperature", "temperature"),
+        &WorldgenSettings::setEquatorTemperature);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_equator_temperature"),
+        &WorldgenSettings::equatorTemperature);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_pole_temperature", "temperature"),
+        &WorldgenSettings::setPoleTemperature);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_pole_temperature"),
+        &WorldgenSettings::poleTemperature);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_vegetation_coefficient", "coefficient"),
+        &WorldgenSettings::setVegetationCoefficient);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_vegetation_coefficient"),
+        &WorldgenSettings::vegetationCoefficient);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_humidity_coefficient", "coefficient"),
+        &WorldgenSettings::setHumidityCoefficient);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_humidity_coefficient"),
+        &WorldgenSettings::humidityCoefficient);
     godot::ClassDB::bind_method(godot::D_METHOD("set_river_source_count", "count"),
                                 &WorldgenSettings::setRiverSourceCount);
     godot::ClassDB::bind_method(godot::D_METHOD("get_river_source_count"),
@@ -156,6 +180,29 @@ void WorldgenSettings::_bind_methods() {
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1,0.001,or_greater"),
                  "set_noise_persistence", "get_noise_persistence");
+
+    ADD_GROUP("Climate", "");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "equator_temperature",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "-50,50,0.1"),
+                 "set_equator_temperature", "get_equator_temperature");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "pole_temperature",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "-50,50,0.1"),
+                 "set_pole_temperature", "get_pole_temperature");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "vegetation_coefficient",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,2,0.01"),
+                 "set_vegetation_coefficient",
+                 "get_vegetation_coefficient");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "humidity_coefficient",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,2,0.01"),
+                 "set_humidity_coefficient", "get_humidity_coefficient");
 
     ADD_GROUP("Rivers", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
@@ -300,6 +347,38 @@ void WorldgenSettings::setNoisePersistence(double persistence) {
 
 double WorldgenSettings::noisePersistence() const noexcept {
     return m_noisePersistence;
+}
+
+void WorldgenSettings::setEquatorTemperature(double temperature) {
+    m_equatorTemperature = temperature;
+}
+
+double WorldgenSettings::equatorTemperature() const noexcept {
+    return m_equatorTemperature;
+}
+
+void WorldgenSettings::setPoleTemperature(double temperature) {
+    m_poleTemperature = temperature;
+}
+
+double WorldgenSettings::poleTemperature() const noexcept {
+    return m_poleTemperature;
+}
+
+void WorldgenSettings::setVegetationCoefficient(double coefficient) {
+    m_vegetationCoefficient = coefficient;
+}
+
+double WorldgenSettings::vegetationCoefficient() const noexcept {
+    return m_vegetationCoefficient;
+}
+
+void WorldgenSettings::setHumidityCoefficient(double coefficient) {
+    m_humidityCoefficient = coefficient;
+}
+
+double WorldgenSettings::humidityCoefficient() const noexcept {
+    return m_humidityCoefficient;
 }
 
 void WorldgenSettings::setRiverSourceCount(std::int64_t count) {

@@ -14,6 +14,7 @@ target_include_directories(worldgen_terrain
 
 target_link_libraries(worldgen_terrain
     PUBLIC
+        worldgen::climate
         worldgen::noise
         worldgen::voronoi
 )

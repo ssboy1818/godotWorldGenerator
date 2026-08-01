@@ -50,6 +50,18 @@ public:
     void setNoisePersistence(double persistence);
     [[nodiscard]] double noisePersistence() const noexcept;
 
+    void setEquatorTemperature(double temperature);
+    [[nodiscard]] double equatorTemperature() const noexcept;
+
+    void setPoleTemperature(double temperature);
+    [[nodiscard]] double poleTemperature() const noexcept;
+
+    void setVegetationCoefficient(double coefficient);
+    [[nodiscard]] double vegetationCoefficient() const noexcept;
+
+    void setHumidityCoefficient(double coefficient);
+    [[nodiscard]] double humidityCoefficient() const noexcept;
+
     void setRiverSourceCount(std::int64_t count);
     [[nodiscard]] std::int64_t riverSourceCount() const noexcept;
 
@@ -90,6 +102,10 @@ private:
     double m_noiseFrequency{0.01};
     double m_noiseLacunarity{2.0};
     double m_noisePersistence{0.5};
+    double m_equatorTemperature{30.0};
+    double m_poleTemperature{-20.0};
+    double m_vegetationCoefficient{1.0};
+    double m_humidityCoefficient{1.0};
     std::int64_t m_riverSourceCount{12};
     double m_riverMinimumSourceElevation{0.6};
     double m_riverRandomness{0.25};

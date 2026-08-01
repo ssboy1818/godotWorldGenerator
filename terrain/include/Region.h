@@ -3,6 +3,7 @@
 #include "River.h"
 #include "WorldDivision.h"
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -26,11 +27,33 @@ public:
     Region(CellId cell,
            double elevation,
            double seaLevel,
-           std::size_t edgeCount)
+           std::size_t edgeCount,
+           double temperature,
+           double humidity,
+           double vegetation)
         : m_cell(cell),
           m_elevation(elevation),
           m_type(elevation < seaLevel ? RegionType::Water : RegionType::Land),
-          m_edgeRivers(edgeCount, INVALID_RIVER_ID) {}
+          m_temperature(temperature),
+          m_humidity(humidity),
+          m_vegetation(vegetation),
+          m_edgeRivers(edgeCount, INVALID_RIVER_ID) {
+        if (!std::isfinite(m_temperature)
+            || m_temperature < -50.0 || m_temperature > 50.0) {
+            throw std::invalid_argument(
+                "A region temperature must be between -50 and 50.");
+        }
+        if (!std::isfinite(m_humidity)
+            || m_humidity < 0.0 || m_humidity > 1.0) {
+            throw std::invalid_argument(
+                "A region humidity value must be between zero and one.");
+        }
+        if (!std::isfinite(m_vegetation)
+            || m_vegetation < 0.0 || m_vegetation > 1.0) {
+            throw std::invalid_argument(
+                "A region vegetation value must be between zero and one.");
+        }
+    }
 
     [[nodiscard]] CellId cell() const noexcept {
         return m_cell;
@@ -54,6 +77,18 @@ public:
 
     [[nodiscard]] bool isLand() const noexcept {
         return m_type == RegionType::Land;
+    }
+
+    [[nodiscard]] double temperature() const noexcept {
+        return m_temperature;
+    }
+
+    [[nodiscard]] double humidity() const noexcept {
+        return m_humidity;
+    }
+
+    [[nodiscard]] double vegetation() const noexcept {
+        return m_vegetation;
     }
 
     [[nodiscard]] ProvinceId provinceId() const noexcept {
@@ -102,6 +137,9 @@ private:
     CellId m_cell;
     double m_elevation;
     RegionType m_type;
+    double m_temperature;
+    double m_humidity;
+    double m_vegetation;
     ProvinceId m_provinceId{INVALID_PROVINCE_ID};
     std::vector<RiverId> m_edgeRivers;
 };

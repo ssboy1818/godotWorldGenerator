@@ -1,3 +1,4 @@
+#include "ClimateGenerator.h"
 #include "PerlinNoise.h"
 #include "WorldGenerator.h"
 
@@ -478,6 +479,116 @@ void testEdgeStrengthValidation() {
     }
 }
 
+void testRegionClimate() {
+    const WorldGenerationSettings settings{
+        .bounds = {{0.0, 0.0}, {120.0, 100.0}},
+        .seed = 211,
+        .columns = 4,
+        .rows = 4,
+        .jitter = 0.0,
+        .noiseOctaves = 4,
+        .noiseFrequency = 0.017,
+        .noiseLacunarity = 2.0,
+        .noisePersistence = 0.5,
+        .equatorTemperature = 40.0,
+        .poleTemperature = -30.0,
+        .vegetationCoefficient = 1.4,
+        .humidityCoefficient = 0.8,
+        .riverSourceCount = 0,
+    };
+    const auto world = WorldGenerator{settings}.generate();
+    const auto repeated = WorldGenerator{settings}.generate();
+    const climate::ClimateGenerator climateGenerator{{
+        .bounds = settings.bounds,
+        .seed = settings.seed,
+        .equatorTemperature = settings.equatorTemperature,
+        .poleTemperature = settings.poleTemperature,
+        .vegetationCoefficient = settings.vegetationCoefficient,
+        .humidityCoefficient = settings.humidityCoefficient,
+        .noiseOctaves = settings.noiseOctaves,
+        .noiseFrequency = settings.noiseFrequency,
+        .noiseLacunarity = settings.noiseLacunarity,
+        .noisePersistence = settings.noisePersistence,
+    }};
+
+    for (const auto &region : world.regions()) {
+        const auto &cell = world.division().cells.at(region.cell());
+        const auto expected = climateGenerator.sample(cell.sitePosition);
+        requireNear(region.temperature(),
+                    expected.temperature,
+                    "A region stores an incorrect temperature.");
+        requireNear(region.humidity(),
+                    expected.humidity,
+                    "A region stores incorrect humidity.");
+        requireNear(region.vegetation(),
+                    expected.vegetation,
+                    "A region stores incorrect vegetation.");
+        require(region.temperature()
+                    == repeated.regions().at(region.id()).temperature()
+                    && region.humidity()
+                           == repeated.regions().at(region.id()).humidity()
+                    && region.vegetation()
+                           == repeated.regions().at(region.id()).vegetation(),
+                "Region climate values are not deterministic.");
+    }
+
+    requireNear(world.regions().at(0).temperature(),
+                world.regions().at(12).temperature(),
+                "Top and bottom temperatures are not symmetric.");
+    require(world.regions().at(4).temperature()
+                > world.regions().at(0).temperature(),
+            "Regions do not become warmer toward the equator.");
+}
+
+void testClimateSettingsValidation() {
+    auto settings = WorldGenerationSettings{
+        .bounds = {{0.0, 0.0}, {10.0, 10.0}},
+    };
+    requireNear(settings.equatorTemperature,
+                30.0,
+                "The default equator temperature must be 30.");
+    requireNear(settings.poleTemperature,
+                -20.0,
+                "The default pole temperature must be -20.");
+    requireNear(settings.vegetationCoefficient,
+                1.0,
+                "The default vegetation coefficient must be one.");
+    requireNear(settings.humidityCoefficient,
+                1.0,
+                "The default humidity coefficient must be one.");
+
+    settings.equatorTemperature = 50.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "An equator temperature above 50 was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.equatorTemperature = 30.0;
+    settings.poleTemperature = 31.0;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A pole warmer than the equator was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.poleTemperature = -20.0;
+    settings.vegetationCoefficient = 2.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A vegetation coefficient above two was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.vegetationCoefficient = 1.0;
+    settings.humidityCoefficient = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative humidity coefficient was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+}
+
 void testProvinceBudgets() {
     auto settings = WorldGenerationSettings{
         .bounds = {{0.0, 0.0}, {150.0, 120.0}},
@@ -773,6 +884,8 @@ int main() {
         testSmoothEdgeDecay();
         testEffectiveSeaLevel();
         testEdgeStrengthValidation();
+        testRegionClimate();
+        testClimateSettingsValidation();
         testProvinceBudgets();
         testProvinceSettingsValidation();
         testRivers();
