@@ -5,11 +5,17 @@ func _initialize() -> void:
     assert(ClassDB.class_exists("WorldgenSettings"))
     assert(ClassDB.class_exists("VoronoiWorldGenerator"))
     assert(ClassDB.class_exists("VoronoiWorldData"))
+    assert(ClassDB.class_exists("VoronoiWorldGenerationTask"))
     assert(ClassDB.class_exists("VoronoiWorld2D"))
     assert(ClassDB.is_parent_class("WorldgenSettings", "Resource"))
     assert(ClassDB.is_parent_class("VoronoiWorldGenerator", "RefCounted"))
     assert(ClassDB.is_parent_class("VoronoiWorldData", "RefCounted"))
+    assert(ClassDB.is_parent_class("VoronoiWorldGenerationTask", "RefCounted"))
     assert(ClassDB.is_parent_class("VoronoiWorld2D", "Node2D"))
+    assert(VoronoiWorldGenerationTask.STATUS_PENDING == 0)
+    assert(VoronoiWorldGenerationTask.STATUS_RUNNING == 1)
+    assert(VoronoiWorldGenerationTask.STATUS_SUCCEEDED == 2)
+    assert(VoronoiWorldGenerationTask.STATUS_FAILED == 3)
     assert(VoronoiWorldData.REGION_TYPE_SEA == 0)
     assert(VoronoiWorldData.REGION_TYPE_LAKE == 1)
     assert(VoronoiWorldData.REGION_TYPE_LAND == 2)
@@ -240,12 +246,48 @@ func _initialize() -> void:
     assert(repeated.province_remaining_scores == world.province_remaining_scores)
     assert(repeated.region_province_indices == world.region_province_indices)
 
+    var async_task := generator.generate_async() as VoronoiWorldGenerationTask
+    assert(async_task != null)
+    assert(async_task.status == VoronoiWorldGenerationTask.STATUS_RUNNING)
+    assert(not async_task.done)
+    settings.seed = 94
+    await async_task.finished
+    settings.seed = 93
+    assert(async_task.done)
+    assert(async_task.successful)
+    assert(async_task.status == VoronoiWorldGenerationTask.STATUS_SUCCEEDED)
+    assert(async_task.error_message.is_empty())
+    var async_world := async_task.result as VoronoiWorldData
+    assert(async_world != null)
+    assert(async_world.sites == world.sites)
+    assert(async_world.vertices == world.vertices)
+    assert(async_world.elevations == world.elevations)
+    assert(async_world.region_types == world.region_types)
+    assert(async_world.river_vertices == world.river_vertices)
+    assert(async_world.province_region_ids == world.province_region_ids)
+
     var node := VoronoiWorld2D.new()
     node.settings = settings
     var node_world := node.generate() as VoronoiWorldData
     assert(node_world != null)
     assert(node_world.sites == world.sites)
+    var node_async_task := node.generate_async() as VoronoiWorldGenerationTask
+    assert(node_async_task != null)
+    await node_async_task.finished
+    assert(node_async_task.successful)
+    assert(node_async_task.result.sites == world.sites)
     node.free()
+
+    var unconfigured_generator := VoronoiWorldGenerator.new()
+    var failed_task := (unconfigured_generator.generate_async()
+            as VoronoiWorldGenerationTask)
+    assert(failed_task.status == VoronoiWorldGenerationTask.STATUS_PENDING)
+    await failed_task.finished
+    assert(failed_task.done)
+    assert(not failed_task.successful)
+    assert(failed_task.status == VoronoiWorldGenerationTask.STATUS_FAILED)
+    assert(failed_task.result == null)
+    assert(not failed_task.error_message.is_empty())
 
     print("Worldgen GDExtension smoke test passed with ", world.cell_count, " cells.")
     quit(0)

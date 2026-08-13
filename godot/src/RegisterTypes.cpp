@@ -2,6 +2,7 @@
 
 #include "VoronoiWorld2D.h"
 #include "VoronoiWorldData.h"
+#include "VoronoiWorldGenerationTask.h"
 #include "VoronoiWorldGenerator.h"
 #include "WorldgenSettings.h"
 
@@ -19,6 +20,7 @@ void initialize_worldgen_module(godot::ModuleInitializationLevel level) {
 
     GDREGISTER_CLASS(WorldgenSettings);
     GDREGISTER_CLASS(VoronoiWorldData);
+    GDREGISTER_ABSTRACT_CLASS(VoronoiWorldGenerationTask);
     GDREGISTER_CLASS(VoronoiWorldGenerator);
     GDREGISTER_CLASS(VoronoiWorld2D);
 }

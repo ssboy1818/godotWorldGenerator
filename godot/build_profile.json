@@ -1,5 +1,7 @@
 {
     "enabled_classes": [
+        "Engine",
+        "MainLoop",
         "Node2D",
         "OS",
         "RefCounted",

@@ -19,6 +19,7 @@ public:
     [[nodiscard]] godot::Ref<WorldgenSettings> settings() const;
 
     [[nodiscard]] godot::Ref<VoronoiWorldData> generate();
+    [[nodiscard]] godot::Ref<VoronoiWorldGenerationTask> generateAsync();
 
 protected:
     static void _bind_methods();

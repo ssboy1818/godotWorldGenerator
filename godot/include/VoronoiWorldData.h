@@ -12,6 +12,7 @@ namespace worldgen {
 
 class World;
 class VoronoiWorldGenerator;
+class VoronoiWorldGenerationTask;
 
 class VoronoiWorldData final : public godot::RefCounted {
     GDCLASS(VoronoiWorldData, godot::RefCounted)
@@ -100,6 +101,7 @@ private:
     void populate(const World &world);
 
     friend class VoronoiWorldGenerator;
+    friend class VoronoiWorldGenerationTask;
 };
 
 } // namespace worldgen

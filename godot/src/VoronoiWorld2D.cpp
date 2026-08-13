@@ -11,6 +11,8 @@ void VoronoiWorld2D::_bind_methods() {
                                 &VoronoiWorld2D::settings);
     godot::ClassDB::bind_method(godot::D_METHOD("generate"),
                                 &VoronoiWorld2D::generate);
+    godot::ClassDB::bind_method(godot::D_METHOD("generate_async"),
+                                &VoronoiWorld2D::generateAsync);
 
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::OBJECT,
                                      "settings",
@@ -36,6 +38,10 @@ godot::Ref<WorldgenSettings> VoronoiWorld2D::settings() const {
 
 godot::Ref<VoronoiWorldData> VoronoiWorld2D::generate() {
     return m_generator->generate();
+}
+
+godot::Ref<VoronoiWorldGenerationTask> VoronoiWorld2D::generateAsync() {
+    return m_generator->generateAsync();
 }
 
 } // namespace worldgen

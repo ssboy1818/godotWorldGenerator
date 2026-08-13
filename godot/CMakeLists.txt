@@ -6,6 +6,7 @@ target_sources(worldgen_extension
         src/RegisterTypes.cpp
         src/VoronoiWorld2D.cpp
         src/VoronoiWorldData.cpp
+        src/VoronoiWorldGenerationTask.cpp
         src/VoronoiWorldGenerator.cpp
         src/WorldgenSettings.cpp
 )

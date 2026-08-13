@@ -1,10 +1,11 @@
 # Worldgen GDExtension
 
 Worldgen is a Godot 4.4 GDExtension backed by an engine-independent C++23 core.
-It synchronously generates a bounded Voronoi world with deterministic terrain
-elevation, land/sea/lake classification, cell adjacency, and rivers that follow
-Voronoi borders downhill from high inland vertices. Regions are also grouped into
-deterministic, contiguous provinces using configurable terrain and river costs.
+It synchronously or asynchronously generates a bounded Voronoi world with
+deterministic terrain elevation, land/sea/lake classification, cell adjacency,
+and rivers that follow Voronoi borders downhill from high inland vertices.
+Regions are also grouped into deterministic, contiguous provinces using
+configurable terrain and river costs.
 An independent climate layer adds seeded temperature, humidity, and vegetation
 fields, then adjusts final land temperature for latitude, elevation, and humidity.
 
@@ -57,11 +58,12 @@ cmake --build build-release --parallel
 - `WorldgenSettings : Resource` contains Inspector-editable bounds, site-grid,
   terrain, seed, and noise settings.
 - `VoronoiWorldGenerator : RefCounted` owns settings and exposes synchronous
-  `generate()`.
+  `generate()` and worker-pool-backed `generate_async()` methods.
+- `VoronoiWorldGenerationTask : RefCounted` represents one asynchronous request
+  and exposes completion signals, status, result, and error data.
 - `VoronoiWorldData : RefCounted` exposes immutable packed result buffers.
 - `VoronoiWorld2D : Node2D` provides a scene-instantiable facade with the same
-  settings property and synchronous `generate()` method. It does not render cells
-  automatically.
+  settings property and generation methods. It does not render cells automatically.
 
 Example GDScript:
 
@@ -121,6 +123,29 @@ for cell in world.cell_count:
     var polygon := world.vertices.slice(first_vertex, after_last_vertex)
     var cell_neighbors := world.neighbors.slice(first_neighbor, after_last_neighbor)
 ```
+
+For generation without blocking the main thread, await the request's `finished`
+signal and then inspect its outcome:
+
+```gdscript
+var task: VoronoiWorldGenerationTask = generator.generate_async()
+await task.finished
+
+if not task.successful:
+    push_error(task.error_message)
+    return
+
+var world: VoronoiWorldData = task.result
+```
+
+`generate_async()` snapshots and validates the current settings before submitting
+the pure C++ calculation to Godot's worker pool. Multiple requests may run at the
+same time and later edits to the settings resource do not affect requests already
+submitted. Packed Godot arrays are created on the main thread after the core
+calculation completes. A task moves through `STATUS_PENDING`, `STATUS_RUNNING`,
+and either `STATUS_SUCCEEDED` or `STATUS_FAILED`; `completed(result)` or
+`failed(error_message)` is emitted before the parameterless `finished` signal.
+Use `done` for a polling-style completion check.
 
 `sites`, `elevations`, `region_land_indices`, and `region_types` contain one
 entry per cell. Water regions have `-1` in `region_land_indices`. Land region

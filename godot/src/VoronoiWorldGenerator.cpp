@@ -139,6 +139,8 @@ void VoronoiWorldGenerator::_bind_methods() {
                                 &VoronoiWorldGenerator::settings);
     godot::ClassDB::bind_method(godot::D_METHOD("generate"),
                                 &VoronoiWorldGenerator::generate);
+    godot::ClassDB::bind_method(godot::D_METHOD("generate_async"),
+                                &VoronoiWorldGenerator::generateAsync);
 
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::OBJECT,
                                      "settings",
@@ -180,6 +182,25 @@ godot::Ref<VoronoiWorldData> VoronoiWorldGenerator::generate() {
             "World generation failed: ", godot::String{error.what()});
         return {};
     }
+}
+
+godot::Ref<VoronoiWorldGenerationTask>
+VoronoiWorldGenerator::generateAsync() {
+    godot::Ref<VoronoiWorldGenerationTask> task;
+    task.instantiate();
+
+    if (m_settings.is_null()) {
+        task->failDeferred(
+            "VoronoiWorldGenerator requires a WorldgenSettings resource.");
+        return task;
+    }
+
+    try {
+        task->start(toCoreSettings(*m_settings.ptr()));
+    } catch (const std::exception &error) {
+        task->failDeferred(godot::String{error.what()});
+    }
+    return task;
 }
 
 } // namespace worldgen
