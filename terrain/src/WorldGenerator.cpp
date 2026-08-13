@@ -193,6 +193,12 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument(
             "The minimum province region count must be positive.");
     }
+    if (settings.provinceMaximumRegionCount != 0
+        && settings.provinceMaximumRegionCount
+               < settings.provinceMinimumRegionCount) {
+        throw std::invalid_argument(
+            "The maximum province region count must be zero or at least the minimum.");
+    }
 }
 
 void applyRiverClimateInfluence(
@@ -624,7 +630,8 @@ World WorldGenerator::generate() const {
         m_settings.provinceBaseCost,
         m_settings.provinceMinimumRegionCount,
         m_settings.provinceShortBorderContribution,
-        m_settings.provinceLandTypeContribution);
+        m_settings.provinceLandTypeContribution,
+        m_settings.provinceMaximumRegionCount);
 
     return World{boundingBox,
                  std::move(division),

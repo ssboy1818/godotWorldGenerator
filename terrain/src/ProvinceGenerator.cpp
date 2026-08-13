@@ -293,6 +293,7 @@ struct MoreExpensiveClaim {
     const std::vector<Region *> &regions,
     std::vector<Province> provinces,
     std::size_t minimumRegionCount,
+    std::size_t maximumRegionCount,
     const ClaimCostParameters &costParameters) {
     if (minimumRegionCount <= 1 || provinces.size() <= 1)
         return provinces;
@@ -372,6 +373,12 @@ struct MoreExpensiveClaim {
         small[province] = provinces[province].regionIds().size()
                           < minimumRegionCount;
         removed[province] = small[province];
+        if (maximumRegionCount != 0
+            && provinces[province].regionIds().size()
+                   > maximumRegionCount) {
+            throw std::logic_error(
+                "Province growth exceeded the maximum region count.");
+        }
     }
 
     // Every connected group of small provinces needs a surviving destination.
@@ -417,6 +424,58 @@ struct MoreExpensiveClaim {
         removed[anchor] = false;
     }
 
+    if (maximumRegionCount != 0) {
+        // Retain enough deterministic anchors in every connected component to
+        // hold all of its regions without exceeding the configured maximum.
+        std::ranges::fill(visited, false);
+        for (std::size_t first = 0; first < provinces.size(); ++first) {
+            if (visited[first])
+                continue;
+
+            std::vector<ProvinceId> component;
+            std::vector<ProvinceId> pending{static_cast<ProvinceId>(first)};
+            visited[first] = true;
+            auto componentRegionCount = std::size_t{0};
+            auto survivorCount = std::size_t{0};
+            while (!pending.empty()) {
+                const auto province = pending.back();
+                pending.pop_back();
+                component.push_back(province);
+                componentRegionCount += provinces[province].regionIds().size();
+                survivorCount += !removed[province];
+                for (const auto neighbor : provinceNeighbors[province]) {
+                    if (!visited[neighbor]) {
+                        visited[neighbor] = true;
+                        pending.push_back(neighbor);
+                    }
+                }
+            }
+
+            const auto requiredSurvivors =
+                componentRegionCount / maximumRegionCount
+                + (componentRegionCount % maximumRegionCount != 0);
+            if (survivorCount >= requiredSurvivors)
+                continue;
+
+            std::ranges::sort(
+                component,
+                [&](ProvinceId left, ProvinceId right) {
+                    const auto leftSize = provinces[left].regionIds().size();
+                    const auto rightSize = provinces[right].regionIds().size();
+                    if (leftSize != rightSize)
+                        return leftSize > rightSize;
+                    return left < right;
+                });
+            for (const auto province : component) {
+                if (!removed[province])
+                    continue;
+                removed[province] = false;
+                if (++survivorCount == requiredSurvivors)
+                    break;
+            }
+        }
+    }
+
     if (std::ranges::none_of(removed, [](bool value) { return value; }))
         return provinces;
 
@@ -434,6 +493,11 @@ struct MoreExpensiveClaim {
     }
 
     std::vector<std::vector<RegionId>> absorbedRegions(provinces.size());
+    std::vector<std::size_t> finalProvinceSizes(provinces.size(), 0);
+    for (std::size_t province = 0; province < provinces.size(); ++province) {
+        if (!removed[province])
+            finalProvinceSizes[province] = provinces[province].regionIds().size();
+    }
     const auto needsReassignment = [&](RegionId region) {
         return originalOwners[region] != INVALID_PROVINCE_ID
                && finalOwners[region] == INVALID_PROVINCE_ID;
@@ -474,6 +538,11 @@ struct MoreExpensiveClaim {
                 const auto candidate = finalOwners[neighbor];
                 if (candidate == INVALID_PROVINCE_ID)
                     continue;
+                if (maximumRegionCount != 0
+                    && finalProvinceSizes[candidate]
+                           >= maximumRegionCount) {
+                    continue;
+                }
 
                 const auto cost = provinceClaimCost(
                     boundingBox,
@@ -497,9 +566,12 @@ struct MoreExpensiveClaim {
             if (selected == INVALID_PROVINCE_ID)
                 continue;
             assignments.emplace_back(region, selected);
+            ++finalProvinceSizes[selected];
         }
 
         if (assignments.empty()) {
+            if (maximumRegionCount != 0)
+                return provinces;
             throw std::logic_error(
                 "Small-province reassignment frontier made no progress.");
         }
@@ -572,7 +644,8 @@ std::vector<Province> generateProvinces(
     double baseCost,
     std::size_t minimumRegionCount,
     double shortBorderContribution,
-    double landTypeContribution) {
+    double landTypeContribution,
+    std::size_t maximumRegionCount) {
     if (!std::isfinite(startScore) || startScore < 0.0
         || !std::isfinite(riverContribution) || riverContribution < 0.0
         || !std::isfinite(elevationContribution)
@@ -599,6 +672,11 @@ std::vector<Province> generateProvinces(
     if (minimumRegionCount == 0) {
         throw std::invalid_argument(
             "The minimum province region count must be positive.");
+    }
+    if (maximumRegionCount != 0
+        && maximumRegionCount < minimumRegionCount) {
+        throw std::invalid_argument(
+            "The maximum province region count must be zero or at least the minimum.");
     }
     if (division.cells.empty())
         return {};
@@ -688,6 +766,10 @@ std::vector<Province> generateProvinces(
 
         addFrontier(seed);
         while (!frontier.empty()) {
+            if (maximumRegionCount != 0
+                && provinceRegions.size() >= maximumRegionCount) {
+                break;
+            }
             const auto claim = frontier.top();
             frontier.pop();
             const auto claimIndex = static_cast<std::size_t>(claim.region);
@@ -713,6 +795,7 @@ std::vector<Province> generateProvinces(
                                     indexedRegions,
                                     std::move(provinces),
                                     minimumRegionCount,
+                                    maximumRegionCount,
                                     costParameters);
 
     for (const auto *region : indexedRegions) {

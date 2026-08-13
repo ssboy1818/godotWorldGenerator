@@ -109,6 +109,7 @@ settings.province_land_type_contribution = 5.0
 settings.province_short_border_contribution = 5.0
 settings.province_base_cost = 1.0
 settings.province_minimum_region_count = 3
+settings.province_maximum_region_count = 0 # unlimited
 generator.settings = settings
 
 var world: VoronoiWorldData = generator.generate()
@@ -274,9 +275,10 @@ borders add progressively more, up to the configured contribution.
 The seed site is the stable center of its province, and the seed itself is free.
 At each step the generator selects the globally cheapest frontier transition;
 costs in the same absolute `EPS` bucket use region and source IDs as deterministic
-tie-breakers. Growth stops when the frontier is empty or its cheapest claim
-exceeds the remaining score, then the next unclaimed land region starts another
-province.
+tie-breakers. Growth stops when the frontier is empty, its cheapest claim exceeds
+the remaining score, or the province reaches `province_maximum_region_count`.
+A maximum of zero disables the region-count limit. The next unclaimed land region
+then starts another province.
 
 After growth, provinces containing fewer than
 `province_minimum_region_count` regions are removed when another province is
@@ -289,7 +291,9 @@ provinces. If
 a connected land component contains only small provinces, its largest province
 (then lowest ID) remains as an anchor so the component always has an owner.
 Absorbed regions are appended after the surviving province's original claim
-order; merging does not spend its remaining growth score. A value of `1`
+order; merging does not spend its remaining growth score. The maximum remains a
+hard cap during merging, so an undersized province is retained if reassignment
+cannot complete without exceeding it. A value of `1`
 disables this cleanup in practice.
 
 Thus every land region belongs to exactly one province, while water regions

@@ -178,6 +178,10 @@ bool requireProvinceGrowth(const World &world,
          ++provinceIndex) {
         const auto &province = world.provinces()[provinceIndex];
         require(!province.regionIds().empty(), "A province has no regions.");
+        require(settings.provinceMaximumRegionCount == 0
+                    || province.regionIds().size()
+                           <= settings.provinceMaximumRegionCount,
+                "A province exceeded the maximum region count.");
         require(province.seedRegion() == province.regionIds().front(),
                 "A province seed is not its first region.");
 
@@ -326,8 +330,11 @@ bool requireProvinceGrowth(const World &world,
                                : 0.0));
             }
         }
-        require(cheapestRemaining > remainingScore + EPS,
-                "A province stopped with an affordable frontier region.");
+        require((settings.provinceMaximumRegionCount != 0
+                 && province.regionIds().size()
+                        == settings.provinceMaximumRegionCount)
+                    || cheapestRemaining > remainingScore + EPS,
+                "A province stopped before reaching its budget or region-count limit.");
         requireNear(province.remainingScore(),
                     remainingScore,
                     "A province stored an incorrect remaining score.");
@@ -1168,6 +1175,20 @@ void testProvinceBudgets() {
             "Free claims did not combine a connected world into one province.");
     requireProvinceGrowth(freeWorld, settings);
 
+    settings.provinceMinimumRegionCount = 3;
+    settings.provinceMaximumRegionCount = 3;
+    const auto cappedWorld = WorldGenerator{settings}.generate();
+    const auto repeatedCappedWorld = WorldGenerator{settings}.generate();
+    require(cappedWorld.provinces().size() > 1,
+            "The maximum region count did not split a free connected world.");
+    requireProvinceGrowth(cappedWorld, settings, &repeatedCappedWorld);
+    require(std::ranges::all_of(
+                cappedWorld.provinces(),
+                [](const Province &province) {
+                    return province.regionIds().size() <= 3;
+                }),
+            "Small-province merging exceeded the maximum region count.");
+
     settings.seaLevel = 1.0;
     settings.edgeStrength = 1.0;
     const auto waterWorld = WorldGenerator{settings}.generate();
@@ -1559,6 +1580,8 @@ void testProvinceSettingsValidation() {
                 "The default province base cost must be 1.");
     require(settings.provinceMinimumRegionCount == 3,
             "The default minimum province region count must be 3.");
+    require(settings.provinceMaximumRegionCount == 0,
+            "The default maximum province region count must be unlimited.");
 
     settings.provinceStartScore = -0.01;
     try {
@@ -1616,6 +1639,14 @@ void testProvinceSettingsValidation() {
     }
 
     settings.provinceMinimumRegionCount = 3;
+    settings.provinceMaximumRegionCount = 2;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A maximum province size below the minimum was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.provinceMaximumRegionCount = 0;
     settings.provinceShortBorderContribution = -0.01;
     try {
         static_cast<void>(WorldGenerator{settings});

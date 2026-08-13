@@ -155,6 +155,9 @@ public:
     void setProvinceMinimumRegionCount(std::int64_t count);
     [[nodiscard]] std::int64_t provinceMinimumRegionCount() const noexcept;
 
+    void setProvinceMaximumRegionCount(std::int64_t count);
+    [[nodiscard]] std::int64_t provinceMaximumRegionCount() const noexcept;
+
 protected:
     static void _bind_methods();
 
@@ -206,6 +209,7 @@ private:
     double m_provinceShortBorderContribution{5.0};
     double m_provinceBaseCost{1.0};
     std::int64_t m_provinceMinimumRegionCount{3};
+    std::int64_t m_provinceMaximumRegionCount{0};
 };
 
 } // namespace worldgen

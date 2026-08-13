@@ -56,6 +56,7 @@ struct WorldGenerationSettings {
     double provinceShortBorderContribution{5.0};
     double provinceBaseCost{1.0};
     std::size_t provinceMinimumRegionCount{3};
+    std::size_t provinceMaximumRegionCount{0};
 };
 
 class WorldGenerator {

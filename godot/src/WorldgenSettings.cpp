@@ -259,6 +259,12 @@ void WorldgenSettings::_bind_methods() {
     godot::ClassDB::bind_method(
         godot::D_METHOD("get_province_minimum_region_count"),
         &WorldgenSettings::provinceMinimumRegionCount);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_maximum_region_count", "count"),
+        &WorldgenSettings::setProvinceMaximumRegionCount);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_maximum_region_count"),
+        &WorldgenSettings::provinceMaximumRegionCount);
 
     ADD_GROUP("World", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::RECT2, "bounds"),
@@ -531,6 +537,12 @@ void WorldgenSettings::_bind_methods() {
                                      "1,1024,1,or_greater"),
                  "set_province_minimum_region_count",
                  "get_province_minimum_region_count");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "province_maximum_region_count",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1024,1,or_greater"),
+                 "set_province_maximum_region_count",
+                 "get_province_maximum_region_count");
 }
 
 void WorldgenSettings::setBounds(const godot::Rect2 &bounds) {
@@ -908,6 +920,14 @@ void WorldgenSettings::setProvinceMinimumRegionCount(std::int64_t count) {
 
 std::int64_t WorldgenSettings::provinceMinimumRegionCount() const noexcept {
     return m_provinceMinimumRegionCount;
+}
+
+void WorldgenSettings::setProvinceMaximumRegionCount(std::int64_t count) {
+    m_provinceMaximumRegionCount = count;
+}
+
+std::int64_t WorldgenSettings::provinceMaximumRegionCount() const noexcept {
+    return m_provinceMaximumRegionCount;
 }
 
 } // namespace worldgen

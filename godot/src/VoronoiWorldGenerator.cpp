@@ -59,6 +59,19 @@ namespace {
         throw std::invalid_argument(
             "Minimum province region count must fit in a positive native size.");
     }
+    const auto provinceMaximumRegionCount =
+        settings.provinceMaximumRegionCount();
+    if (provinceMaximumRegionCount < 0
+        || static_cast<std::uint64_t>(provinceMaximumRegionCount)
+               > std::numeric_limits<std::size_t>::max()) {
+        throw std::invalid_argument(
+            "Maximum province region count must fit in a non-negative native size.");
+    }
+    if (provinceMaximumRegionCount != 0
+        && provinceMaximumRegionCount < provinceMinimumRegionCount) {
+        throw std::invalid_argument(
+            "Maximum province region count must be zero or at least the minimum.");
+    }
 
     const auto bounds = settings.bounds();
     const Vector2d minimum{
@@ -129,6 +142,8 @@ namespace {
         .provinceBaseCost = settings.provinceBaseCost(),
         .provinceMinimumRegionCount =
             static_cast<std::size_t>(provinceMinimumRegionCount),
+        .provinceMaximumRegionCount =
+            static_cast<std::size_t>(provinceMaximumRegionCount),
     };
 }
 

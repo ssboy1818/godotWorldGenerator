@@ -49,6 +49,7 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.province_short_border_contribution, 5.0))
     assert(is_equal_approx(settings.province_base_cost, 1.0))
     assert(settings.province_minimum_region_count == 3)
+    assert(settings.province_maximum_region_count == 0)
     assert(is_equal_approx(settings.equator_temperature, 30.0))
     assert(is_equal_approx(settings.pole_temperature, -20.0))
     assert(is_equal_approx(settings.vegetation_coefficient, 1.0))
@@ -113,6 +114,7 @@ func _initialize() -> void:
     settings.province_short_border_contribution = 5.0
     settings.province_base_cost = 1.0
     settings.province_minimum_region_count = 3
+    settings.province_maximum_region_count = 12
 
     var generator := VoronoiWorldGenerator.new()
     generator.settings = settings
@@ -207,6 +209,8 @@ func _initialize() -> void:
         var first_region: int = world.province_offsets[province]
         var after_last_region: int = world.province_offsets[province + 1]
         assert(after_last_region > first_region)
+        assert(after_last_region - first_region
+               <= settings.province_maximum_region_count)
         assert(world.province_seed_region_ids[province]
                == world.province_region_ids[first_region])
         assert(world.province_remaining_scores[province] >= 0.0)

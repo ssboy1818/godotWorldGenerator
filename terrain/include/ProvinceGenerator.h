@@ -21,6 +21,7 @@ namespace worldgen {
     double baseCost,
     std::size_t minimumRegionCount = 3,
     double shortBorderContribution = 0.0,
-    double landTypeContribution = 0.0);
+    double landTypeContribution = 0.0,
+    std::size_t maximumRegionCount = 0);
 
 } // namespace worldgen
