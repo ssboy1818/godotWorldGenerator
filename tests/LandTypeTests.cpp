@@ -65,7 +65,7 @@ void testEveryLandType() {
                 "Cool lush land was not classified as boreal forest.");
     requireType(LandType::Grassland,
                 0.3,
-                climate(15.0, 0.5, 0.4),
+                climate(15.0, 0.5, 0.5),
                 "Temperate moderate land was not classified as grassland.");
     requireType(LandType::TemperateForest,
                 0.3,
@@ -85,7 +85,7 @@ void testEveryLandType() {
                 "Hot dry land was not classified as desert.");
     requireType(LandType::Savanna,
                 0.3,
-                climate(25.0, 0.5, 0.4),
+                climate(25.0, 0.5, 0.5),
                 "Hot moderate land was not classified as savanna.");
     requireType(LandType::TropicalForest,
                 0.3,
@@ -105,7 +105,7 @@ void testLandforms() {
     require(classifyLandform(0.68) == Landform::Mountain,
             "The mountain threshold was not inclusive.");
 
-    const auto sample = climate(15.0, 0.5, 0.4);
+    const auto sample = climate(15.0, 0.5, 0.5);
     requireType(LandType::Grassland,
                 0.68,
                 sample,
@@ -129,6 +129,26 @@ void testTemperatureBands() {
                 0.3,
                 climate(15.0, 0.8, 0.5),
                 "Humidity alone classified temperate land as forest.");
+    requireType(LandType::Steppe,
+                0.3,
+                climate(15.0, 0.2, 0.7),
+                "Dry temperate land with independent vegetation was not steppe.");
+    requireType(LandType::Steppe,
+                0.3,
+                climate(15.0, 0.7, 0.2),
+                "Sparse temperate land with independent humidity was not steppe.");
+    requireType(LandType::Desert,
+                0.3,
+                climate(25.0, 0.2, 0.7),
+                "Dry tropical land with independent vegetation was not desert.");
+    requireType(LandType::Desert,
+                0.3,
+                climate(25.0, 0.7, 0.2),
+                "Sparse tropical land with independent humidity was not desert.");
+    requireType(LandType::Savanna,
+                0.3,
+                climate(25.0, 0.5, 0.5),
+                "Moderate tropical land was not savanna.");
 
     auto conditions = LandTypeConditions{};
     conditions.hotTemperature = 30.0;

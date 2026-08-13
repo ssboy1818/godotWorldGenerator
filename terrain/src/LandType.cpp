@@ -89,6 +89,12 @@ LandType classifyLandType(double normalizedElevation,
                           const LandTypeConditions &conditions) {
     validateInputs(normalizedElevation, climate);
     validateLandTypeConditions(conditions);
+    // Humidity and vegetation are independent noise fields. Treat either dry
+    // signal as sufficient; requiring their rare intersection makes arid land
+    // fall through to grassland or savanna instead.
+    const auto isArid = climate.humidity <= conditions.dryHumidity
+                        || climate.vegetation
+                               <= conditions.sparseVegetation;
 
     if (climate.temperature <= conditions.polarTemperature)
         return LandType::Tundra;
@@ -102,8 +108,7 @@ LandType classifyLandType(double normalizedElevation,
     }
 
     if (climate.temperature >= conditions.hotTemperature) {
-        if (climate.humidity <= conditions.dryHumidity
-            && climate.vegetation <= conditions.sparseVegetation) {
+        if (isArid) {
             return LandType::Desert;
         }
         if (climate.humidity >= conditions.wetHumidity
@@ -122,8 +127,7 @@ LandType classifyLandType(double normalizedElevation,
         && climate.vegetation >= conditions.lushVegetation) {
         return LandType::Wetland;
     }
-    if (climate.humidity <= conditions.dryHumidity
-        && climate.vegetation <= conditions.sparseVegetation) {
+    if (isArid) {
         return LandType::Steppe;
     }
     if (climate.humidity > conditions.dryHumidity

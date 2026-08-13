@@ -756,10 +756,10 @@ void testDefaultLandTypeDiversity() {
         const auto &sample = world.landClimates().at(region.landClimateId());
         require(sample.temperature
                     >= settings.landTypeConditions.hotTemperature
-                    && sample.humidity
-                           <= settings.landTypeConditions.dryHumidity
-                    && sample.vegetation
-                           <= settings.landTypeConditions.sparseVegetation,
+                    && (sample.humidity
+                            <= settings.landTypeConditions.dryHumidity
+                        || sample.vegetation
+                               <= settings.landTypeConditions.sparseVegetation),
                 "A desert violates its final climate conditions.");
     }
 
@@ -771,12 +771,51 @@ void testDefaultLandTypeDiversity() {
     require(counts[static_cast<std::size_t>(LandType::Grassland)] * 4
                 < landCount * 3,
             "Grassland occupies at least three quarters of default land.");
+    require(counts[static_cast<std::size_t>(LandType::Desert)] > 0,
+            "The default world generated no deserts.");
+    require(counts[static_cast<std::size_t>(LandType::Savanna)] > 0,
+            "The default world generated no savannas.");
     require(std::ranges::count_if(counts,
                                   [](std::size_t count) {
                                       return count > 0;
                                   })
                 >= 7,
             "The default world generated fewer than seven land types.");
+}
+
+void testAridClimateProducesDeserts() {
+    const WorldGenerationSettings settings{
+        .bounds = {{0.0, 0.0}, {2048.0, 2048.0}},
+        .seed = 41,
+        .columns = 48,
+        .rows = 48,
+        .humidityCoefficient = 0.4,
+        .oceanHumidityCoefficient = 0.0,
+        .riverSourceCount = 0,
+        .provinceMinimumRegionCount = 1,
+    };
+    const auto world = WorldGenerator{settings}.generate();
+    auto hotRegionCount = std::size_t{0};
+    auto desertCount = std::size_t{0};
+    auto savannaCount = std::size_t{0};
+    for (const auto &region : world.regions()) {
+        if (!region.isLand())
+            continue;
+
+        const auto &sample = world.landClimates().at(region.landClimateId());
+        if (sample.temperature < settings.landTypeConditions.hotTemperature)
+            continue;
+        ++hotRegionCount;
+        desertCount += region.landType() == LandType::Desert;
+        savannaCount += region.landType() == LandType::Savanna;
+    }
+
+    require(hotRegionCount > 0,
+            "The arid-climate fixture generated no tropical land.");
+    require(desertCount == hotRegionCount,
+            "Dry tropical land collapsed into a non-desert biome.");
+    require(savannaCount == 0,
+            "Dry tropical land incorrectly collapsed into savanna.");
 }
 
 void testLatitudeBiomeBands() {
@@ -1923,6 +1962,7 @@ int main() {
         testEdgeStrengthValidation();
         testRegionClimate();
         testDefaultLandTypeDiversity();
+        testAridClimateProducesDeserts();
         testLatitudeBiomeBands();
         testClimateSettingsValidation();
         testOceanHumidity();

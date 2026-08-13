@@ -220,10 +220,10 @@ fields keep neighboring regions grouped. Land-type settings must satisfy
 | `LAND_TYPE_TUNDRA` | polar land, or cool land without enough moisture and vegetation for boreal forest |
 | `LAND_TYPE_BOREAL_FOREST` | cool, non-dry, lush land |
 | `LAND_TYPE_WETLAND` | temperate, wet, lush land no higher than `wetland_elevation` |
-| `LAND_TYPE_STEPPE` | temperate, dry, sparse land |
+| `LAND_TYPE_STEPPE` | temperate land that is dry or sparsely vegetated |
 | `LAND_TYPE_TEMPERATE_FOREST` | temperate, non-dry, lush land |
 | `LAND_TYPE_GRASSLAND` | remaining temperate land |
-| `LAND_TYPE_DESERT` | tropical, dry, sparse land |
+| `LAND_TYPE_DESERT` | tropical land that is dry or sparsely vegetated |
 | `LAND_TYPE_RAINFOREST` | tropical, wet, lush land |
 | `LAND_TYPE_TROPICAL_FOREST` | tropical, non-dry, lush land that is not rainforest |
 | `LAND_TYPE_SAVANNA` | remaining tropical land |
