@@ -255,6 +255,12 @@ bool requireProvinceGrowth(const World &world,
                                                 world.division()
                                                     .cells.at(neighbor)
                                                     .sitePosition)
+                                      + (world.regions().at(neighbor).landType()
+                                                 != world.regions()
+                                                        .at(province.seedRegion())
+                                                        .landType()
+                                             ? settings.provinceLandTypeContribution
+                                             : 0.0)
                                       + (crossesRiver
                                              ? settings.provinceRiverContribution
                                              : 0.0);
@@ -309,6 +315,12 @@ bool requireProvinceGrowth(const World &world,
                                   settings.bounds,
                                   provinceCenter,
                                   world.division().cells.at(neighbor).sitePosition)
+                        + (world.regions().at(neighbor).landType()
+                                   != world.regions()
+                                          .at(province.seedRegion())
+                                          .landType()
+                               ? settings.provinceLandTypeContribution
+                               : 0.0)
                         + (crossesRiver
                                ? settings.provinceRiverContribution
                                : 0.0));
@@ -1084,6 +1096,7 @@ void testProvinceBudgets() {
         .provinceRiverContribution = 0.0,
         .provinceElevationContribution = 0.0,
         .provinceDistanceContribution = 0.0,
+        .provinceLandTypeContribution = 0.0,
         .provinceShortBorderContribution = 0.0,
         .provinceBaseCost = 1.0,
         .provinceMinimumRegionCount = 1,
@@ -1235,6 +1248,58 @@ void testProvinceShortBorderPenalty() {
             "A longer shared border was not preferred over a short border.");
 }
 
+void testProvinceLandTypePenalty() {
+    const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
+    const WorldDivision division{
+        .cells = {
+            {.id = 0, .sitePosition = {5.0, 5.0}, .neighbors = {1, 2}},
+            {.id = 1, .sitePosition = {4.0, 5.0}, .neighbors = {0, 3}},
+            {.id = 2, .sitePosition = {6.0, 5.0}, .neighbors = {0}},
+            {.id = 3, .sitePosition = {3.0, 5.0}, .neighbors = {1}},
+        },
+    };
+    const auto generate = [&](double landTypeContribution) {
+        std::vector<Region> regions;
+        for (CellId cell = 0; cell < division.cells.size(); ++cell) {
+            regions.emplace_back(cell,
+                                 0.0,
+                                 0.0,
+                                 0,
+                                 static_cast<LandClimateId>(cell));
+            regions.back().setLandType(cell == 1
+                                           ? LandType::Desert
+                                           : LandType::Grassland);
+        }
+        return generateProvinces(bounds,
+                                 division,
+                                 regions,
+                                 1.0,
+                                 0.0,
+                                 0.0,
+                                 0.0,
+                                 0.0,
+                                 1,
+                                 0.0,
+                                 landTypeContribution);
+    };
+
+    const auto disabled = generate(0.0);
+    require(disabled.size() == 1
+                && disabled.front().regionIds()
+                       == std::vector<RegionId>{0, 1, 2, 3},
+            "Disabled land-type cost changed region-ID claim ordering.");
+
+    const auto enabled = generate(1.0);
+    require(enabled.size() == 1,
+            "The land-type penalty unexpectedly split an affordable province.");
+    require(enabled.front().regionIds()
+                == std::vector<RegionId>{0, 2, 1, 3},
+            "Province growth did not penalize land types differing from its seed.");
+    requireNear(enabled.front().remainingScore(),
+                0.0,
+                "Land-type penalties were not charged relative to the province seed.");
+}
+
 void testSmallProvinceMerging() {
     const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
     const WorldDivision splitDivision{
@@ -1340,6 +1405,53 @@ void testSmallProvinceMerging() {
             "An undersized province without another province was deleted.");
 }
 
+void testSmallProvinceCheapestReassignment() {
+    const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
+    const WorldDivision division{
+        .cells = {
+            {.id = 0, .sitePosition = {0.0, 0.0}, .neighbors = {1}},
+            {.id = 1, .sitePosition = {1.0, 0.0}, .neighbors = {0, 2}},
+            {.id = 2, .sitePosition = {2.0, 0.0}, .neighbors = {1, 3}},
+            {.id = 3, .sitePosition = {3.0, 0.0}, .neighbors = {2, 4}},
+            {.id = 4, .sitePosition = {4.0, 0.0}, .neighbors = {3, 5}},
+            {.id = 5, .sitePosition = {5.0, 0.0}, .neighbors = {4, 6}},
+            {.id = 6, .sitePosition = {6.0, 0.0}, .neighbors = {5}},
+        },
+    };
+    std::vector<Region> regions;
+    for (CellId cell = 0; cell < division.cells.size(); ++cell) {
+        const auto elevation = cell <= 2 ? 0.0
+                             : cell == 3 ? 0.8
+                                         : 1.0;
+        regions.emplace_back(cell,
+                             elevation,
+                             0.0,
+                             0,
+                             static_cast<LandClimateId>(cell));
+    }
+
+    const auto provinces = generateProvinces(bounds,
+                                             division,
+                                             regions,
+                                             2.0,
+                                             0.0,
+                                             10.0,
+                                             0.0,
+                                             1.0,
+                                             3,
+                                             0.0);
+    require(provinces.size() == 2,
+            "The cheapest-reassignment fixture did not remove its small province.");
+    require(provinces[0].regionIds()
+                == std::vector<RegionId>{0, 1, 2},
+            "An orphaned region joined a more expensive lower-ID province.");
+    require(provinces[1].regionIds()
+                == std::vector<RegionId>{4, 5, 6, 3},
+            "An orphaned region did not join its cheapest neighboring province.");
+    require(regions[3].provinceId() == 1,
+            "Cheapest reassignment did not update the region's compacted province ID.");
+}
+
 void testCoastalSmallProvinceMerging() {
     const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
     const WorldDivision division{
@@ -1397,6 +1509,9 @@ void testProvinceSettingsValidation() {
     requireNear(settings.provinceDistanceContribution,
                 5.0,
                 "The default province distance contribution must be 5.");
+    requireNear(settings.provinceLandTypeContribution,
+                5.0,
+                "The default province land-type contribution must be 5.");
     requireNear(settings.provinceShortBorderContribution,
                 5.0,
                 "The default province short-border contribution must be 5.");
@@ -1438,6 +1553,14 @@ void testProvinceSettingsValidation() {
     }
 
     settings.provinceDistanceContribution = 5.0;
+    settings.provinceLandTypeContribution = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "A negative province land-type contribution was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.provinceLandTypeContribution = 5.0;
     settings.provinceBaseCost = std::numeric_limits<double>::infinity();
     try {
         static_cast<void>(WorldGenerator{settings});
@@ -1806,7 +1929,9 @@ int main() {
         testProvinceBudgets();
         testProvinceCostOrdering();
         testProvinceShortBorderPenalty();
+        testProvinceLandTypePenalty();
         testSmallProvinceMerging();
+        testSmallProvinceCheapestReassignment();
         testCoastalSmallProvinceMerging();
         testProvinceSettingsValidation();
         testRivers();

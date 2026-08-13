@@ -170,6 +170,11 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument(
             "Province short-border contribution must be finite and non-negative.");
     }
+    if (!std::isfinite(settings.provinceLandTypeContribution)
+        || settings.provinceLandTypeContribution < 0.0) {
+        throw std::invalid_argument(
+            "Province land-type contribution must be finite and non-negative.");
+    }
     if (!std::isfinite(settings.provinceBaseCost)
         || settings.provinceBaseCost < 0.0) {
         throw std::invalid_argument(
@@ -179,7 +184,8 @@ void validateSettings(const WorldGenerationSettings &settings) {
                        + settings.provinceRiverContribution
                        + settings.provinceElevationContribution
                        + settings.provinceDistanceContribution
-                       + settings.provinceShortBorderContribution)) {
+                       + settings.provinceShortBorderContribution
+                       + settings.provinceLandTypeContribution)) {
         throw std::invalid_argument(
             "The maximum province claim cost must be finite.");
     }
@@ -617,7 +623,8 @@ World WorldGenerator::generate() const {
         m_settings.provinceDistanceContribution,
         m_settings.provinceBaseCost,
         m_settings.provinceMinimumRegionCount,
-        m_settings.provinceShortBorderContribution);
+        m_settings.provinceShortBorderContribution,
+        m_settings.provinceLandTypeContribution);
 
     return World{boundingBox,
                  std::move(division),

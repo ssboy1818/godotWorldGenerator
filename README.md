@@ -105,6 +105,7 @@ settings.province_start_score = 10.0
 settings.province_river_contribution = 5.0
 settings.province_elevation_contribution = 10.0
 settings.province_distance_contribution = 5.0
+settings.province_land_type_contribution = 5.0
 settings.province_short_border_contribution = 5.0
 settings.province_base_cost = 1.0
 settings.province_minimum_region_count = 3
@@ -259,6 +260,7 @@ province_base_cost
     + province_elevation_contribution * abs(elevation[a] - elevation[b])
     + province_distance_contribution
         * distance(site[b], site[seed]) / world_bounds_diagonal
+    + province_land_type_contribution if land_type[b] != land_type[seed]
     + province_short_border_contribution
         * clamp(1 - shared_border_length(a, b) / average_cell_length, 0, 1)
     + province_river_contribution if their shared border carries a river
@@ -279,9 +281,11 @@ province.
 After growth, provinces containing fewer than
 `province_minimum_region_count` regions are removed when another province is
 reachable through land neighbors. Their regions are reassigned independently in
-neighbor-distance rounds. Each region selects the province held by the largest
-number of its already assigned neighbors, with the lower province ID breaking a
-tie. This can split one small province across several surrounding provinces. If
+neighbor-distance rounds. Each region evaluates the full claim cost through each
+already assigned neighbor and selects the cheapest reachable province using that
+province's original seed. Lower province and source-region IDs break an
+`EPS`-bucket tie. This can split one small province across several surrounding
+provinces. If
 a connected land component contains only small provinces, its largest province
 (then lowest ID) remains as an anchor so the component always has an owner.
 Absorbed regions are appended after the surviving province's original claim

@@ -122,6 +122,8 @@ namespace {
         .provinceRiverContribution = settings.provinceRiverContribution(),
         .provinceElevationContribution = settings.provinceElevationContribution(),
         .provinceDistanceContribution = settings.provinceDistanceContribution(),
+        .provinceLandTypeContribution =
+            settings.provinceLandTypeContribution(),
         .provinceShortBorderContribution =
             settings.provinceShortBorderContribution(),
         .provinceBaseCost = settings.provinceBaseCost(),

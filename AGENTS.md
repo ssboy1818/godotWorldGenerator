@@ -44,10 +44,11 @@ world or provide a complete visualization demo.
    normalized elevation, and the adjusted humidity, then classify every land
    region into a temperature-banded climate biome and an independent landform.
 9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
-   river, normalized seed-distance, short shared-border, and base claim costs.
-   Remove undersized provinces through deterministic neighbor-based region
-   reassignment, compact the surviving IDs, and assign every land region a
-   province ID while leaving water regions unassigned.
+   river, normalized seed-distance, seed-land-type difference, short
+   shared-border, and base claim costs. Remove undersized provinces through
+   deterministic cheapest-cost neighbor reassignment, compact the surviving IDs,
+   and assign every land region a province ID while leaving water regions
+   unassigned.
 10. Return an immutable core `World` containing the bounds, diagram, regions,
     rivers, and provinces.
 11. Copy the result into a read-only `VoronoiWorldData` with packed Godot arrays.

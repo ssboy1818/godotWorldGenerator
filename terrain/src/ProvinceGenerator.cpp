@@ -22,6 +22,17 @@ struct Claim {
     RegionId fromRegion;
 };
 
+struct ClaimCostParameters {
+    double riverContribution;
+    double elevationContribution;
+    double distanceContribution;
+    double shortBorderContribution;
+    double landTypeContribution;
+    double baseCost;
+    double sharedEdgeTolerance;
+    double averageCellLength;
+};
+
 [[nodiscard]] long double quantizedCost(double cost) noexcept {
     // EPS-sized buckets provide a transitive equivalence relation, unlike a
     // pairwise abs(left - right) <= EPS comparison in a heap comparator.
@@ -166,6 +177,88 @@ struct MoreExpensiveClaim {
                                / std::hypot(width, height));
 }
 
+[[nodiscard]] double provinceClaimCost(
+    const BoundingBox &boundingBox,
+    const WorldDivision &division,
+    const std::vector<Region *> &regions,
+    const ClaimCostParameters &parameters,
+    RegionId provinceSeed,
+    RegionId fromRegion,
+    RegionId claimedRegion) {
+    const auto seedIndex = static_cast<std::size_t>(provinceSeed);
+    const auto fromIndex = static_cast<std::size_t>(fromRegion);
+    const auto claimedIndex = static_cast<std::size_t>(claimedRegion);
+    if (seedIndex >= regions.size()
+        || fromIndex >= regions.size()
+        || claimedIndex >= regions.size()) {
+        throw std::logic_error(
+            "Province generation received an invalid claim region.");
+    }
+
+    const auto &seed = *regions[seedIndex];
+    const auto &from = *regions[fromIndex];
+    const auto &claimed = *regions[claimedIndex];
+    const auto &fromCell = division.cells[fromIndex];
+    const auto &claimedCell = division.cells[claimedIndex];
+    const auto crossesRiver = sharedBoundaryHasRiver(
+        fromCell,
+        from,
+        claimedCell,
+        claimed,
+        parameters.sharedEdgeTolerance);
+    const auto elevationDifference = std::abs(
+        from.elevation() - claimed.elevation());
+    const auto distance = normalizedDistance(
+        boundingBox,
+        division.cells[seedIndex].sitePosition,
+        claimedCell.sitePosition);
+
+    auto shortBorderPenalty = 0.0;
+    if (parameters.shortBorderContribution > 0.0) {
+        const auto borderLength = sharedBoundaryLength(
+            fromCell,
+            claimedCell,
+            parameters.sharedEdgeTolerance);
+        if (!std::isfinite(borderLength)
+            || borderLength <= parameters.sharedEdgeTolerance) {
+            throw std::logic_error(
+                "Neighboring regions do not share a measurable border.");
+        }
+        shortBorderPenalty = parameters.shortBorderContribution
+                             * std::clamp(
+                                 1.0
+                                     - borderLength
+                                           / parameters.averageCellLength,
+                                 0.0,
+                                 1.0);
+    }
+
+    auto landTypePenalty = 0.0;
+    if (parameters.landTypeContribution > 0.0) {
+        if (!seed.hasLandType() || !claimed.hasLandType()) {
+            throw std::logic_error(
+                "Province land-type costs require classified land regions.");
+        }
+        if (seed.landType() != claimed.landType())
+            landTypePenalty = parameters.landTypeContribution;
+    }
+
+    const auto cost = parameters.baseCost
+                      + parameters.elevationContribution
+                            * elevationDifference
+                      + parameters.distanceContribution * distance
+                      + (crossesRiver
+                             ? parameters.riverContribution
+                             : 0.0)
+                      + shortBorderPenalty
+                      + landTypePenalty;
+    if (!std::isfinite(cost) || cost < 0.0) {
+        throw std::logic_error(
+            "Province generation produced an invalid claim cost.");
+    }
+    return cost;
+}
+
 [[nodiscard]] std::vector<Region *> indexRegions(
     const WorldDivision &division,
     std::span<Region> regions) {
@@ -195,10 +288,12 @@ struct MoreExpensiveClaim {
 }
 
 [[nodiscard]] std::vector<Province> mergeSmallProvinces(
+    const BoundingBox &boundingBox,
     const WorldDivision &division,
     const std::vector<Region *> &regions,
     std::vector<Province> provinces,
-    std::size_t minimumRegionCount) {
+    std::size_t minimumRegionCount,
+    const ClaimCostParameters &costParameters) {
     if (minimumRegionCount <= 1 || provinces.size() <= 1)
         return provinces;
 
@@ -371,30 +466,36 @@ struct MoreExpensiveClaim {
             if (!needsReassignment(region))
                 continue;
 
-            std::vector<ProvinceId> candidates;
+            auto selected = INVALID_PROVINCE_ID;
+            auto selectedSource = INVALID_REGION_ID;
+            auto selectedCostOrder =
+                std::numeric_limits<long double>::infinity();
             for (const auto neighbor : regionNeighbors[region]) {
-                if (finalOwners[neighbor] != INVALID_PROVINCE_ID)
-                    candidates.push_back(finalOwners[neighbor]);
-            }
-            if (candidates.empty())
-                continue;
+                const auto candidate = finalOwners[neighbor];
+                if (candidate == INVALID_PROVINCE_ID)
+                    continue;
 
-            std::ranges::sort(candidates);
-            auto selected = candidates.front();
-            auto selectedCount = std::size_t{0};
-            for (std::size_t first = 0; first < candidates.size();) {
-                auto after = first + 1;
-                while (after < candidates.size()
-                       && candidates[after] == candidates[first]) {
-                    ++after;
+                const auto cost = provinceClaimCost(
+                    boundingBox,
+                    division,
+                    regions,
+                    costParameters,
+                    provinces[candidate].seedRegion(),
+                    neighbor,
+                    region);
+                const auto costOrder = quantizedCost(cost);
+                if (costOrder < selectedCostOrder
+                    || (costOrder == selectedCostOrder
+                        && (candidate < selected
+                            || (candidate == selected
+                                && neighbor < selectedSource)))) {
+                    selected = candidate;
+                    selectedSource = neighbor;
+                    selectedCostOrder = costOrder;
                 }
-                const auto count = after - first;
-                if (count > selectedCount) {
-                    selected = candidates[first];
-                    selectedCount = count;
-                }
-                first = after;
             }
+            if (selected == INVALID_PROVINCE_ID)
+                continue;
             assignments.emplace_back(region, selected);
         }
 
@@ -470,7 +571,8 @@ std::vector<Province> generateProvinces(
     double distanceContribution,
     double baseCost,
     std::size_t minimumRegionCount,
-    double shortBorderContribution) {
+    double shortBorderContribution,
+    double landTypeContribution) {
     if (!std::isfinite(startScore) || startScore < 0.0
         || !std::isfinite(riverContribution) || riverContribution < 0.0
         || !std::isfinite(elevationContribution)
@@ -479,7 +581,9 @@ std::vector<Province> generateProvinces(
         || distanceContribution < 0.0
         || !std::isfinite(baseCost) || baseCost < 0.0
         || !std::isfinite(shortBorderContribution)
-        || shortBorderContribution < 0.0) {
+        || shortBorderContribution < 0.0
+        || !std::isfinite(landTypeContribution)
+        || landTypeContribution < 0.0) {
         throw std::invalid_argument(
             "Province scores, costs, and contributions must be finite and non-negative.");
     }
@@ -487,7 +591,8 @@ std::vector<Province> generateProvinces(
                        + riverContribution
                        + elevationContribution
                        + distanceContribution
-                       + shortBorderContribution)) {
+                       + shortBorderContribution
+                       + landTypeContribution)) {
         throw std::invalid_argument(
             "The maximum province claim cost must be finite.");
     }
@@ -499,6 +604,14 @@ std::vector<Province> generateProvinces(
         return {};
 
     const auto indexedRegions = indexRegions(division, regions);
+    if (landTypeContribution > 0.0) {
+        for (const auto *region : indexedRegions) {
+            if (region->isLand() && !region->hasLandType()) {
+                throw std::logic_error(
+                    "Province land-type costs require classified land regions.");
+            }
+        }
+    }
     const auto sharedEdgeTolerance = numericalToleranceFor(boundingBox)
                                          .sharedEdgeLength();
     auto averageCellLength = 0.0;
@@ -515,6 +628,16 @@ std::vector<Province> generateProvinces(
                 "Province generation could not determine an average cell length.");
         }
     }
+    const ClaimCostParameters costParameters{
+        .riverContribution = riverContribution,
+        .elevationContribution = elevationContribution,
+        .distanceContribution = distanceContribution,
+        .shortBorderContribution = shortBorderContribution,
+        .landTypeContribution = landTypeContribution,
+        .baseCost = baseCost,
+        .sharedEdgeTolerance = sharedEdgeTolerance,
+        .averageCellLength = averageCellLength,
+    };
     std::vector<bool> assigned(regions.size(), false);
     for (std::size_t region = 0; region < indexedRegions.size(); ++region)
         assigned[region] = indexedRegions[region]->isWater();
@@ -528,7 +651,6 @@ std::vector<Province> generateProvinces(
             continue;
 
         const auto seed = static_cast<RegionId>(seedIndex);
-        const auto provinceCenter = division.cells[seedIndex].sitePosition;
         const auto provinceId = static_cast<ProvinceId>(provinces.size());
         auto remainingScore = startScore;
         std::vector<RegionId> provinceRegions{seed};
@@ -541,7 +663,6 @@ std::vector<Province> generateProvinces(
         const auto addFrontier = [&](RegionId fromRegion) {
             const auto fromIndex = static_cast<std::size_t>(fromRegion);
             const auto &fromCell = division.cells[fromIndex];
-            const auto &from = *indexedRegions[fromIndex];
             for (const auto neighborCell : fromCell.neighbors) {
                 const auto neighborIndex = static_cast<std::size_t>(neighborCell);
                 if (neighborIndex >= indexedRegions.size()) {
@@ -551,47 +672,14 @@ std::vector<Province> generateProvinces(
                 if (assigned[neighborIndex])
                     continue;
 
-                const auto &neighbor = *indexedRegions[neighborIndex];
-                const auto crossesRiver = sharedBoundaryHasRiver(
-                    fromCell,
-                    from,
-                    division.cells[neighborIndex],
-                    neighbor,
-                    sharedEdgeTolerance);
-                const auto elevationDifference = std::abs(
-                    from.elevation() - neighbor.elevation());
-                const auto distance = normalizedDistance(
+                const auto cost = provinceClaimCost(
                     boundingBox,
-                    provinceCenter,
-                    division.cells[neighborIndex].sitePosition);
-                auto shortBorderPenalty = 0.0;
-                if (shortBorderContribution > 0.0) {
-                    const auto borderLength = sharedBoundaryLength(
-                        fromCell,
-                        division.cells[neighborIndex],
-                        sharedEdgeTolerance);
-                    if (!std::isfinite(borderLength)
-                        || borderLength <= sharedEdgeTolerance) {
-                        throw std::logic_error(
-                            "Neighboring regions do not share a measurable border.");
-                    }
-                    shortBorderPenalty = shortBorderContribution
-                                         * std::clamp(
-                                             1.0
-                                                 - borderLength
-                                                       / averageCellLength,
-                                             0.0,
-                                             1.0);
-                }
-                const auto cost = baseCost
-                                  + elevationContribution * elevationDifference
-                                  + distanceContribution * distance
-                                  + (crossesRiver ? riverContribution : 0.0)
-                                  + shortBorderPenalty;
-                if (!std::isfinite(cost) || cost < 0.0) {
-                    throw std::logic_error(
-                        "Province generation produced an invalid claim cost.");
-                }
+                    division,
+                    indexedRegions,
+                    costParameters,
+                    seed,
+                    fromRegion,
+                    static_cast<RegionId>(neighborIndex));
                 frontier.push({cost,
                                static_cast<RegionId>(neighborIndex),
                                fromRegion});
@@ -620,10 +708,12 @@ std::vector<Province> generateProvinces(
                                remainingScore);
     }
 
-    provinces = mergeSmallProvinces(division,
+    provinces = mergeSmallProvinces(boundingBox,
+                                    division,
                                     indexedRegions,
                                     std::move(provinces),
-                                    minimumRegionCount);
+                                    minimumRegionCount,
+                                    costParameters);
 
     for (const auto *region : indexedRegions) {
         if (region->isLand() != region->hasProvince()) {

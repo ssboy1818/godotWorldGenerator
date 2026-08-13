@@ -45,6 +45,7 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.province_river_contribution, 5.0))
     assert(is_equal_approx(settings.province_elevation_contribution, 10.0))
     assert(is_equal_approx(settings.province_distance_contribution, 5.0))
+    assert(is_equal_approx(settings.province_land_type_contribution, 5.0))
     assert(is_equal_approx(settings.province_short_border_contribution, 5.0))
     assert(is_equal_approx(settings.province_base_cost, 1.0))
     assert(settings.province_minimum_region_count == 3)
@@ -108,6 +109,7 @@ func _initialize() -> void:
     settings.province_river_contribution = 5.0
     settings.province_elevation_contribution = 10.0
     settings.province_distance_contribution = 5.0
+    settings.province_land_type_contribution = 5.0
     settings.province_short_border_contribution = 5.0
     settings.province_base_cost = 1.0
     settings.province_minimum_region_count = 3
