@@ -44,6 +44,15 @@ namespace {
         throw std::invalid_argument("Noise octaves must fit in a positive 32-bit integer.");
     }
 
+    const auto lloydRelaxationIterations =
+        settings.lloydRelaxationIterations();
+    if (lloydRelaxationIterations < 0
+        || static_cast<std::uint64_t>(lloydRelaxationIterations)
+               > std::numeric_limits<std::uint32_t>::max()) {
+        throw std::invalid_argument(
+            "Lloyd relaxation iterations must fit in a non-negative 32-bit integer.");
+    }
+
     const auto riverSourceCount = settings.riverSourceCount();
     if (riverSourceCount < 0
         || static_cast<std::uint64_t>(riverSourceCount)
@@ -90,6 +99,8 @@ namespace {
         .columns = static_cast<std::size_t>(columns),
         .rows = static_cast<std::size_t>(rows),
         .jitter = settings.jitter(),
+        .lloydRelaxationIterations =
+            static_cast<std::uint32_t>(lloydRelaxationIterations),
         .seaLevel = settings.seaLevel(),
         .edgeDecayRatio = {
             static_cast<double>(edgeDecayRatio.x),

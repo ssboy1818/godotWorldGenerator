@@ -25,6 +25,12 @@ void WorldgenSettings::_bind_methods() {
                                 &WorldgenSettings::setJitter);
     godot::ClassDB::bind_method(godot::D_METHOD("get_jitter"),
                                 &WorldgenSettings::jitter);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_lloyd_relaxation_iterations", "iterations"),
+        &WorldgenSettings::setLloydRelaxationIterations);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_lloyd_relaxation_iterations"),
+        &WorldgenSettings::lloydRelaxationIterations);
     godot::ClassDB::bind_method(godot::D_METHOD("set_sea_level", "sea_level"),
                                 &WorldgenSettings::setSeaLevel);
     godot::ClassDB::bind_method(godot::D_METHOD("get_sea_level"),
@@ -294,6 +300,12 @@ void WorldgenSettings::_bind_methods() {
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1,0.01"),
                  "set_jitter", "get_jitter");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
+                                     "lloyd_relaxation_iterations",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,10,1,or_greater"),
+                 "set_lloyd_relaxation_iterations",
+                 "get_lloyd_relaxation_iterations");
 
     ADD_GROUP("Terrain", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
@@ -595,6 +607,14 @@ void WorldgenSettings::setJitter(double jitter) {
 
 double WorldgenSettings::jitter() const noexcept {
     return m_jitter;
+}
+
+void WorldgenSettings::setLloydRelaxationIterations(std::int64_t iterations) {
+    m_lloydRelaxationIterations = iterations;
+}
+
+std::int64_t WorldgenSettings::lloydRelaxationIterations() const noexcept {
+    return m_lloydRelaxationIterations;
 }
 
 void WorldgenSettings::setSeaLevel(double seaLevel) {

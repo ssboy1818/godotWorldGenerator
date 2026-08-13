@@ -56,7 +56,7 @@ cmake --build build-release --parallel
 ## Godot API
 
 - `WorldgenSettings : Resource` contains Inspector-editable bounds, site-grid,
-  terrain, seed, and noise settings.
+  Lloyd relaxation, terrain, seed, and noise settings.
 - `VoronoiWorldGenerator : RefCounted` owns settings and exposes synchronous
   `generate()` and worker-pool-backed `generate_async()` methods.
 - `VoronoiWorldGenerationTask : RefCounted` represents one asynchronous request
@@ -74,6 +74,7 @@ settings.bounds = Rect2(0, 0, 2048, 2048)
 settings.seed = 42
 settings.columns = 64
 settings.rows = 64
+settings.lloyd_relaxation_iterations = 2
 settings.equator_temperature = 30.0
 settings.pole_temperature = -20.0
 settings.vegetation_coefficient = 1.0
@@ -126,6 +127,10 @@ for cell in world.cell_count:
     var polygon := world.vertices.slice(first_vertex, after_last_vertex)
     var cell_neighbors := world.neighbors.slice(first_neighbor, after_last_neighbor)
 ```
+
+`lloyd_relaxation_iterations` defaults to `0`. Each enabled iteration rebuilds
+the bounded Voronoi diagram and moves every site to its cell's area centroid, so
+it makes cell sizes more regular at the cost of one additional diagram solve.
 
 For generation without blocking the main thread, await the request's `finished`
 signal and then inspect its outcome:

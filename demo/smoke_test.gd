@@ -34,6 +34,7 @@ func _initialize() -> void:
     assert(VoronoiWorldData.LANDFORM_MOUNTAIN == 2)
 
     var settings := WorldgenSettings.new()
+    assert(settings.lloyd_relaxation_iterations == 0)
     assert(is_equal_approx(settings.edge_strength, 0.55))
     assert(settings.river_source_count == 12)
     assert(is_equal_approx(settings.river_minimum_source_elevation, 0.6))
@@ -77,6 +78,7 @@ func _initialize() -> void:
     settings.columns = 16
     settings.rows = 16
     settings.jitter = 0.8
+    settings.lloyd_relaxation_iterations = 1
     settings.sea_level = 0.3
     settings.edge_decay_ratio = Vector2(0.1, 0.1)
     settings.edge_strength = 0.2

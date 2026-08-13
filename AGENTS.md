@@ -21,8 +21,10 @@ world or provide a complete visualization demo.
 
 1. Convert and validate a `WorldgenSettings` resource into core settings.
 2. Use `JitteredGridSiteGenerator` to place one seed point in each grid slot.
-3. Pass those sites to `Fortune`, which performs a Fortune-style sweep and builds
-   Voronoi topology in a `DCEL`.
+   When configured, repeatedly build the bounded diagram and move every site to
+   its polygon centroid for deterministic Lloyd relaxation.
+3. Pass unrelaxed sites to `Fortune`, or reuse the final relaxed diagram. `Fortune`
+   performs a Fortune-style sweep and builds Voronoi topology in a `DCEL`.
 4. Clip/finalize every cell against the world bounds and store its ordered polygon
    vertices in `Polygon::vertices`.
 5. Sample multi-octave Perlin noise at each site's position.
@@ -85,6 +87,8 @@ persist a bare ID without also retaining the owning world/diagram.
 Construction of the bounded Voronoi diagram.
 
 - `Fortune` owns the event queue, beach line, and output `DCEL` for one calculation.
+- `LloydRelaxer` repeatedly rebuilds the bounded diagram and moves sites to their
+  cell centroids while preserving input order and stable cell IDs.
 - `EventQueue` owns site and circle events; invalidated circle events remain owned
   until the queue is cleared and are ignored when popped.
 - `BeachLine` is a red-black tree for search with an additional linked ordering of
@@ -173,7 +177,8 @@ terrain code must not depend on Godot headers or engine object lifetimes.
 
 The GDExtension adapter and registration layer.
 
-- `WorldgenSettings` is a `Resource` with Inspector-editable generation inputs.
+- `WorldgenSettings` is a `Resource` with Inspector-editable generation inputs,
+  including the number of optional Lloyd relaxation iterations.
 - `VoronoiWorldGenerator` is a `RefCounted` synchronous generation service.
 - `VoronoiWorldData` is a read-only `RefCounted` result with packed arrays.
 - `VoronoiWorld2D` is a scene-instantiable `Node2D` facade over the service.
@@ -256,7 +261,8 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
 `VoronoiWorldData`, and `VoronoiWorld2D`. It covers:
 
 - bounds or world size;
-- site columns/rows or another site-placement strategy;
+- site columns/rows or another site-placement strategy, plus Lloyd relaxation
+  iterations;
 - jitter and all random seeds;
 - sea level, edge-decay ratio/strength, noise parameters, climate coefficients,
   ocean humidity distance/strength, temperatures, temperature noise/elevation/

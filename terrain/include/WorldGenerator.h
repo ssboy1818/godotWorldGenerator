@@ -16,6 +16,7 @@ struct WorldGenerationSettings {
     std::size_t columns{100};
     std::size_t rows{100};
     double jitter{0.8};
+    std::uint32_t lloydRelaxationIterations{0};
 
     double seaLevel{0.45};
     Vector2d edgeDecayRatio{0.15, 0.15};

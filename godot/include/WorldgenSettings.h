@@ -29,6 +29,9 @@ public:
     void setJitter(double jitter);
     [[nodiscard]] double jitter() const noexcept;
 
+    void setLloydRelaxationIterations(std::int64_t iterations);
+    [[nodiscard]] std::int64_t lloydRelaxationIterations() const noexcept;
+
     void setSeaLevel(double seaLevel);
     [[nodiscard]] double seaLevel() const noexcept;
 
@@ -170,6 +173,7 @@ private:
     std::int64_t m_columns{100};
     std::int64_t m_rows{100};
     double m_jitter{0.8};
+    std::int64_t m_lloydRelaxationIterations{0};
     double m_seaLevel{0.45};
     godot::Vector2 m_edgeDecayRatio{0.15, 0.15};
     double m_edgeStrength{0.55};

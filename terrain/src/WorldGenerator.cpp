@@ -1,10 +1,10 @@
 #include "WorldGenerator.h"
 
 #include "ClimateGenerator.h"
-#include "Fortune.h"
 #include "JitteredGridSiteGenerator.h"
 #include "Landform.h"
 #include "LandType.h"
+#include "LloydRelaxer.h"
 #include "NumericalPolicy.h"
 #include "PerlinNoise.h"
 #include "ProvinceGenerator.h"
@@ -520,8 +520,10 @@ World WorldGenerator::generate() const {
     };
     auto sites = siteGenerator.generateSites(boundingBox);
 
-    Fortune fortune;
-    auto division = fortune.generate(sites, boundingBox);
+    const LloydRelaxer relaxer;
+    auto division = relaxer.relax(sites,
+                                  boundingBox,
+                                  m_settings.lloydRelaxationIterations);
 
     const Vector2d decayRadius{
         (boundingBox.max.x - boundingBox.min.x) * m_settings.edgeDecayRatio.x,

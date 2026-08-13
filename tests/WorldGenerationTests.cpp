@@ -1,5 +1,6 @@
 #include "ClimateGenerator.h"
 #include "Id.h"
+#include "JitteredGridSiteGenerator.h"
 #include "Landform.h"
 #include "LandType.h"
 #include "PerlinNoise.h"
@@ -54,6 +55,20 @@ double normalizedLandElevation(const Region &region, double maximumRelief) {
 
 bool pointsNear(Vector2d first, Vector2d second, double coordinateTolerance) {
     return (first - second).length() <= coordinateTolerance;
+}
+
+Vector2d polygonCentroid(const std::vector<Vector2d> &vertices) {
+    auto twiceArea = 0.0;
+    Vector2d weightedCentroid;
+    for (std::size_t index = 0; index < vertices.size(); ++index) {
+        const auto &current = vertices[index];
+        const auto &next = vertices[(index + 1) % vertices.size()];
+        const auto cross = current.x * next.y - current.y * next.x;
+        twiceArea += cross;
+        weightedCentroid += (current + next) * cross;
+    }
+    require(twiceArea != 0.0, "A test polygon has zero area.");
+    return weightedCentroid / (3.0 * twiceArea);
 }
 
 bool segmentsShareBoundary(Vector2d firstStart,
@@ -382,6 +397,82 @@ void testSmoothEdgeDecay() {
     requireNear(noise::edgeDecay(bounds, radius, {50.0, 50.0}),
                 0.0,
                 "Edge decay must remain zero in the interior.");
+}
+
+void testLloydRelaxation() {
+    const WorldGenerationSettings settings{
+        .bounds = {{-20.0, 10.0}, {130.0, 110.0}},
+        .seed = 8675309,
+        .columns = 5,
+        .rows = 4,
+        .jitter = 0.95,
+        .seaLevel = 1.0,
+        .edgeStrength = 0.0,
+        .riverSourceCount = 0,
+    };
+    require(settings.lloydRelaxationIterations == 0,
+            "Lloyd relaxation must be disabled by default.");
+
+    const auto unrelaxed = WorldGenerator{settings}.generate();
+    const JitteredGridSiteGenerator initialSiteGenerator{
+        settings.columns,
+        settings.rows,
+        settings.jitter,
+        settings.seed,
+    };
+    const auto initialSites = initialSiteGenerator.generateSites(settings.bounds);
+    require(initialSites.size() == unrelaxed.division().cells.size(),
+            "The unrelaxed world changed the site count.");
+    for (std::size_t index = 0; index < initialSites.size(); ++index) {
+        require(unrelaxed.division().cells[index].sitePosition
+                    == initialSites[index].position,
+                "Zero Lloyd iterations changed an initial site.");
+    }
+
+    auto relaxedSettings = settings;
+    relaxedSettings.lloydRelaxationIterations = 1;
+    const auto relaxed = WorldGenerator{relaxedSettings}.generate();
+    const auto repeated = WorldGenerator{relaxedSettings}.generate();
+    require(relaxed.division().cells.size() == unrelaxed.division().cells.size(),
+            "Lloyd relaxation changed the cell count.");
+
+    auto movedSite = false;
+    constexpr auto centroidTolerance = 1e-9;
+    for (std::size_t index = 0;
+         index < relaxed.division().cells.size();
+         ++index) {
+        const auto expected = polygonCentroid(
+            unrelaxed.division().cells[index].vertices);
+        const auto &cell = relaxed.division().cells[index];
+        const auto &repeatedCell = repeated.division().cells[index];
+        require(pointsNear(cell.sitePosition, expected, centroidTolerance),
+                "A Lloyd-relaxed site is not its previous cell centroid.");
+        require(relaxedSettings.bounds.contains(cell.sitePosition),
+                "Lloyd relaxation moved a site outside the world bounds.");
+        require(cell.sitePosition == repeatedCell.sitePosition,
+                "Lloyd-relaxed sites are not deterministic.");
+        require(cell.vertices == repeatedCell.vertices,
+                "Lloyd-relaxed polygons are not deterministic.");
+        movedSite = movedSite
+                    || !pointsNear(cell.sitePosition,
+                                   initialSites[index].position,
+                                   centroidTolerance);
+    }
+    require(movedSite, "The Lloyd relaxation fixture did not move any sites.");
+
+    auto twiceRelaxedSettings = relaxedSettings;
+    twiceRelaxedSettings.lloydRelaxationIterations = 2;
+    const auto twiceRelaxed = WorldGenerator{twiceRelaxedSettings}.generate();
+    for (std::size_t index = 0;
+         index < twiceRelaxed.division().cells.size();
+         ++index) {
+        const auto expected = polygonCentroid(
+            relaxed.division().cells[index].vertices);
+        require(pointsNear(twiceRelaxed.division().cells[index].sitePosition,
+                           expected,
+                           centroidTolerance),
+                "Successive Lloyd iterations did not use the previous diagram.");
+    }
 }
 
 void testEffectiveSeaLevel() {
@@ -2085,6 +2176,7 @@ int main() {
     try {
         testFractalNoise();
         testSmoothEdgeDecay();
+        testLloydRelaxation();
         testEffectiveSeaLevel();
         testWaterConnectivityTypes();
         testEdgeStrengthValidation();
