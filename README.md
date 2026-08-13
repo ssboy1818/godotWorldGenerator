@@ -291,10 +291,11 @@ provinces. If
 a connected land component contains only small provinces, its largest province
 (then lowest ID) remains as an anchor so the component always has an owner.
 Absorbed regions are appended after the surviving province's original claim
-order; merging does not spend its remaining growth score. The maximum remains a
-hard cap during merging, so an undersized province is retained if reassignment
-cannot complete without exceeding it. A value of `1`
-disables this cleanup in practice.
+order; merging does not spend its remaining growth score. During reassignment,
+targets below `province_maximum_region_count` are preferred even when their claim
+cost is higher. If every adjacent target is already full, the cheapest target
+still receives the region so cleanup always completes. A value of `1` disables
+this cleanup in practice.
 
 Thus every land region belongs to exactly one province, while water regions
 belong to none; province indices are compact and stable for fixed settings and

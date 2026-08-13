@@ -424,58 +424,6 @@ struct MoreExpensiveClaim {
         removed[anchor] = false;
     }
 
-    if (maximumRegionCount != 0) {
-        // Retain enough deterministic anchors in every connected component to
-        // hold all of its regions without exceeding the configured maximum.
-        std::ranges::fill(visited, false);
-        for (std::size_t first = 0; first < provinces.size(); ++first) {
-            if (visited[first])
-                continue;
-
-            std::vector<ProvinceId> component;
-            std::vector<ProvinceId> pending{static_cast<ProvinceId>(first)};
-            visited[first] = true;
-            auto componentRegionCount = std::size_t{0};
-            auto survivorCount = std::size_t{0};
-            while (!pending.empty()) {
-                const auto province = pending.back();
-                pending.pop_back();
-                component.push_back(province);
-                componentRegionCount += provinces[province].regionIds().size();
-                survivorCount += !removed[province];
-                for (const auto neighbor : provinceNeighbors[province]) {
-                    if (!visited[neighbor]) {
-                        visited[neighbor] = true;
-                        pending.push_back(neighbor);
-                    }
-                }
-            }
-
-            const auto requiredSurvivors =
-                componentRegionCount / maximumRegionCount
-                + (componentRegionCount % maximumRegionCount != 0);
-            if (survivorCount >= requiredSurvivors)
-                continue;
-
-            std::ranges::sort(
-                component,
-                [&](ProvinceId left, ProvinceId right) {
-                    const auto leftSize = provinces[left].regionIds().size();
-                    const auto rightSize = provinces[right].regionIds().size();
-                    if (leftSize != rightSize)
-                        return leftSize > rightSize;
-                    return left < right;
-                });
-            for (const auto province : component) {
-                if (!removed[province])
-                    continue;
-                removed[province] = false;
-                if (++survivorCount == requiredSurvivors)
-                    break;
-            }
-        }
-    }
-
     if (std::ranges::none_of(removed, [](bool value) { return value; }))
         return provinces;
 
@@ -534,15 +482,11 @@ struct MoreExpensiveClaim {
             auto selectedSource = INVALID_REGION_ID;
             auto selectedCostOrder =
                 std::numeric_limits<long double>::infinity();
+            auto selectedHasCapacity = false;
             for (const auto neighbor : regionNeighbors[region]) {
                 const auto candidate = finalOwners[neighbor];
                 if (candidate == INVALID_PROVINCE_ID)
                     continue;
-                if (maximumRegionCount != 0
-                    && finalProvinceSizes[candidate]
-                           >= maximumRegionCount) {
-                    continue;
-                }
 
                 const auto cost = provinceClaimCost(
                     boundingBox,
@@ -553,14 +497,22 @@ struct MoreExpensiveClaim {
                     neighbor,
                     region);
                 const auto costOrder = quantizedCost(cost);
-                if (costOrder < selectedCostOrder
-                    || (costOrder == selectedCostOrder
-                        && (candidate < selected
-                            || (candidate == selected
-                                && neighbor < selectedSource)))) {
+                const auto hasCapacity = maximumRegionCount == 0
+                                         || finalProvinceSizes[candidate]
+                                                < maximumRegionCount;
+                const auto cheaper = costOrder < selectedCostOrder
+                                     || (costOrder == selectedCostOrder
+                                         && (candidate < selected
+                                             || (candidate == selected
+                                                 && neighbor
+                                                        < selectedSource)));
+                if (selected == INVALID_PROVINCE_ID
+                    || (hasCapacity && !selectedHasCapacity)
+                    || (hasCapacity == selectedHasCapacity && cheaper)) {
                     selected = candidate;
                     selectedSource = neighbor;
                     selectedCostOrder = costOrder;
+                    selectedHasCapacity = hasCapacity;
                 }
             }
             if (selected == INVALID_PROVINCE_ID)
@@ -570,8 +522,6 @@ struct MoreExpensiveClaim {
         }
 
         if (assignments.empty()) {
-            if (maximumRegionCount != 0)
-                return provinces;
             throw std::logic_error(
                 "Small-province reassignment frontier made no progress.");
         }

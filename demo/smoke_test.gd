@@ -209,8 +209,6 @@ func _initialize() -> void:
         var first_region: int = world.province_offsets[province]
         var after_last_region: int = world.province_offsets[province + 1]
         assert(after_last_region > first_region)
-        assert(after_last_region - first_region
-               <= settings.province_maximum_region_count)
         assert(world.province_seed_region_ids[province]
                == world.province_region_ids[first_region])
         assert(world.province_remaining_scores[province] >= 0.0)

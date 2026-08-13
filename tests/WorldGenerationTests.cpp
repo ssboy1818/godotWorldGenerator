@@ -178,10 +178,6 @@ bool requireProvinceGrowth(const World &world,
          ++provinceIndex) {
         const auto &province = world.provinces()[provinceIndex];
         require(!province.regionIds().empty(), "A province has no regions.");
-        require(settings.provinceMaximumRegionCount == 0
-                    || province.regionIds().size()
-                           <= settings.provinceMaximumRegionCount,
-                "A province exceeded the maximum region count.");
         require(province.seedRegion() == province.regionIds().front(),
                 "A province seed is not its first region.");
 
@@ -332,7 +328,7 @@ bool requireProvinceGrowth(const World &world,
         }
         require((settings.provinceMaximumRegionCount != 0
                  && province.regionIds().size()
-                        == settings.provinceMaximumRegionCount)
+                        >= settings.provinceMaximumRegionCount)
                     || cheapestRemaining > remainingScore + EPS,
                 "A province stopped before reaching its budget or region-count limit.");
         requireNear(province.remainingScore(),
@@ -1175,7 +1171,7 @@ void testProvinceBudgets() {
             "Free claims did not combine a connected world into one province.");
     requireProvinceGrowth(freeWorld, settings);
 
-    settings.provinceMinimumRegionCount = 3;
+    settings.provinceMinimumRegionCount = 1;
     settings.provinceMaximumRegionCount = 3;
     const auto cappedWorld = WorldGenerator{settings}.generate();
     const auto repeatedCappedWorld = WorldGenerator{settings}.generate();
@@ -1187,7 +1183,7 @@ void testProvinceBudgets() {
                 [](const Province &province) {
                     return province.regionIds().size() <= 3;
                 }),
-            "Small-province merging exceeded the maximum region count.");
+            "Province growth exceeded the maximum region count.");
 
     settings.seaLevel = 1.0;
     settings.edgeStrength = 1.0;
@@ -1510,6 +1506,70 @@ void testSmallProvinceCheapestReassignment() {
             "An orphaned region did not join its cheapest neighboring province.");
     require(regions[3].provinceId() == 1,
             "Cheapest reassignment did not update the region's compacted province ID.");
+}
+
+void testCappedSmallProvinceReassignment() {
+    const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
+    const auto generate = [&](std::size_t regionCount) {
+        WorldDivision division;
+        division.cells.reserve(regionCount);
+        for (CellId id = 0; id < regionCount; ++id) {
+            std::vector<CellId> neighbors;
+            if (id > 0)
+                neighbors.push_back(id - 1);
+            if (static_cast<std::size_t>(id) + 1 < regionCount)
+                neighbors.push_back(id + 1);
+            division.cells.push_back({
+                .id = id,
+                .sitePosition = {static_cast<double>(id), 0.0},
+                .neighbors = std::move(neighbors),
+            });
+        }
+
+        std::vector<Region> regions;
+        regions.reserve(regionCount);
+        for (CellId id = 0; id < regionCount; ++id) {
+            regions.emplace_back(id,
+                                 id <= 3 ? 0.0 : 1.0,
+                                 0.0,
+                                 0,
+                                 static_cast<LandClimateId>(id));
+        }
+        auto provinces = generateProvinces(bounds,
+                                           division,
+                                           regions,
+                                           2.0,
+                                           0.0,
+                                           10.0,
+                                           0.0,
+                                           1.0,
+                                           2,
+                                           0.0,
+                                           0.0,
+                                           3);
+        return std::pair{std::move(provinces), std::move(regions)};
+    };
+
+    const auto [provinces, regions] = generate(6);
+    require(provinces.size() == 2,
+            "A capped small province was not integrated into another province.");
+    require(provinces[0].regionIds()
+                == std::vector<RegionId>{0, 1, 2},
+            "A full cheapest province accepted another region.");
+    require(provinces[1].regionIds()
+                == std::vector<RegionId>{4, 5, 3},
+            "Capped reassignment did not try the next-best neighbor with capacity.");
+    require(regions[3].provinceId() == 1,
+            "Capped reassignment stored the wrong compacted province ID.");
+
+    const auto [fullProvinces, fullRegions] = generate(7);
+    require(fullProvinces.size() == 2,
+            "A small province survived when every neighboring province was full.");
+    require(fullProvinces[0].regionIds()
+                == std::vector<RegionId>{0, 1, 2, 3},
+            "All-full reassignment did not fall back to the cheapest neighbor.");
+    require(fullRegions[3].provinceId() == 0,
+            "All-full reassignment stored the wrong compacted province ID.");
 }
 
 void testCoastalSmallProvinceMerging() {
@@ -2003,6 +2063,7 @@ int main() {
         testProvinceLandTypePenalty();
         testSmallProvinceMerging();
         testSmallProvinceCheapestReassignment();
+        testCappedSmallProvinceReassignment();
         testCoastalSmallProvinceMerging();
         testProvinceSettingsValidation();
         testRivers();
