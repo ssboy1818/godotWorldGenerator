@@ -18,18 +18,22 @@ class VoronoiWorldData final : public godot::RefCounted {
 
 public:
     enum {
-        REGION_TYPE_WATER = 0,
-        REGION_TYPE_LAND = 1,
-        LAND_TYPE_MOUNTAIN = 0,
-        LAND_TYPE_SNOW_PEAKS = 1,
-        LAND_TYPE_HILLS = 2,
-        LAND_TYPE_FIELDS = 3,
-        LAND_TYPE_FOREST = 4,
-        LAND_TYPE_SPARSE = 5,
+        REGION_TYPE_SEA = 0,
+        REGION_TYPE_LAKE = 1,
+        REGION_TYPE_LAND = 2,
+        LAND_TYPE_TUNDRA = 0,
+        LAND_TYPE_BOREAL_FOREST = 1,
+        LAND_TYPE_GRASSLAND = 2,
+        LAND_TYPE_TEMPERATE_FOREST = 3,
+        LAND_TYPE_STEPPE = 4,
+        LAND_TYPE_WETLAND = 5,
         LAND_TYPE_DESERT = 6,
-        LAND_TYPE_SWAMP = 7,
-        LAND_TYPE_RAINFOREST = 8,
-        LAND_TYPE_TUNDRA = 9,
+        LAND_TYPE_SAVANNA = 7,
+        LAND_TYPE_TROPICAL_FOREST = 8,
+        LAND_TYPE_RAINFOREST = 9,
+        LANDFORM_PLAIN = 0,
+        LANDFORM_HILL = 1,
+        LANDFORM_MOUNTAIN = 2,
     };
 
     VoronoiWorldData() = default;
@@ -48,6 +52,7 @@ public:
     [[nodiscard]] godot::PackedFloat64Array landHumidities() const;
     [[nodiscard]] godot::PackedFloat64Array landVegetations() const;
     [[nodiscard]] godot::PackedInt32Array landTypes() const;
+    [[nodiscard]] godot::PackedInt32Array landforms() const;
     [[nodiscard]] godot::PackedInt32Array regionTypes() const;
     [[nodiscard]] std::int64_t riverCount() const noexcept;
     [[nodiscard]] godot::PackedVector2Array riverVertices() const;
@@ -79,6 +84,7 @@ private:
     godot::PackedFloat64Array m_landHumidities;
     godot::PackedFloat64Array m_landVegetations;
     godot::PackedInt32Array m_landTypes;
+    godot::PackedInt32Array m_landforms;
     godot::PackedInt32Array m_regionTypes;
     godot::PackedVector2Array m_riverVertices;
     godot::PackedFloat64Array m_riverStrengths;

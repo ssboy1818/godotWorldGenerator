@@ -5,7 +5,7 @@
 Worldgen is a Godot 4 GDExtension that procedurally generates a
 bounded two-dimensional world and partitions it into Voronoi cells. Each cell is a
 gameplay region with geometry and generated properties such as elevation and
-land/water classification, plus temperature, humidity, and vegetation for land.
+land/sea/lake classification, plus temperature, humidity, and vegetation for land.
 Godot can
 request a seeded world, inspect its cells and their relationships, and use the
 result to build meshes, maps, navigation, simulation, or editor previews.
@@ -27,7 +27,7 @@ world or provide a complete visualization demo.
    vertices in `Polygon::vertices`.
 5. Sample multi-octave Perlin noise at each site's position.
 6. Raise the effective sea level near the world border using a smooth edge-decay
-   mask and determine each polygon's land/water classification.
+   mask and determine whether each polygon is land or water.
 7. For land regions, sample independent, domain-separated humidity and vegetation
    noise into a dense land-only climate array. Build one `Region` per polygon with
    the climate ID or the invalid ID for water, and record high land regions as
@@ -37,12 +37,12 @@ world or provide a complete visualization demo.
    confluences, split the network into linked river segments, and annotate the
    corresponding region edge indices. Increase humidity and vegetation in land
    regions adjoining rivers according to the strongest local segment's flow.
-   Identify boundary-connected ocean cells and add distance-decayed ocean
-   humidity to land. Normalize land relief against the greatest generated height
-   above local effective sea level. Finalize temperature from shaped latitude,
-   independent temperature noise, normalized elevation, and the adjusted
-   humidity, then classify every land region from compound final-climate and
-   normalized-elevation conditions.
+   Classify boundary-connected water as sea and enclosed water components as
+   lakes, then add distance-decayed sea humidity to land. Normalize land relief
+   against the greatest generated height above local effective sea level.
+   Finalize temperature from shaped latitude, independent temperature noise,
+   normalized elevation, and the adjusted humidity, then classify every land
+   region into a temperature-banded climate biome and an independent landform.
 9. Grow contiguous provinces from unclaimed land-region seeds using elevation,
    river, normalized seed-distance, short shared-border, and base claim costs.
    Remove undersized provinces through deterministic neighbor-based region
@@ -140,17 +140,17 @@ The domain-level orchestration layer.
 - `WorldGenerator` owns an immutable copy of `WorldGenerationSettings`, validates
   it, invokes site, Voronoi, noise, climate, river, and province generation, and
   assembles a `World`.
-- `LandType` classifies land as mountain, snow peaks, hills, fields, forest,
-  sparse, desert, swamp, rainforest, or tundra from configurable compound
-  conditions over its final climate and actual land relief normalized by the
-  world's greatest generated height above local effective sea level.
+- `LandType` classifies climate biomes from explicit polar/cool, temperate, and
+  tropical temperature bands plus humidity and vegetation conditions.
+  `Landform` independently classifies normalized relief as plain, hill, or
+  mountain.
 - `RiverNode` stores a polygon vertex and accumulated flow strength. `River`
   stores an ordered node vector plus the ID of its shared downstream segment.
 - `World` owns the generated diagram, regions, rivers, and provinces.
-- `Region` references a polygon by ID and stores elevation, land/water type, a
-  land-only climate ID and land type, an optional land-only province ID, and one
-  optional river ID per ordered polygon edge. `World` stores climate samples
-  densely for land regions only.
+- `Region` references a polygon by ID and stores elevation, land/sea/lake type, a
+  land-only climate ID, biome, and landform, an optional land-only province ID,
+  and one optional river ID per ordered polygon edge. `World` stores climate
+  samples densely for land regions only.
 - `Province` stores an ordered union of region IDs, its seed, and remaining claim
   score.
 
@@ -259,7 +259,7 @@ The initial Godot API exposes `WorldgenSettings`, `VoronoiWorldGenerator`,
   ocean humidity distance/strength, temperatures, temperature noise/elevation/
   humidity/latitude controls, compound land-type condition thresholds, and river
   source/routing controls;
-- per-cell site position, ordered polygon vertices, elevation, land/water type,
+- per-cell site position, ordered polygon vertices, elevation, land/sea/lake type,
   and mappings to compact land-only temperature, humidity, vegetation, and land
   type arrays;
 - stable cell indices and neighboring cell indices;
@@ -343,8 +343,8 @@ Do not describe the following as completed:
 - a complete linked DCEL boundary for every clipped polygon;
 - documented handling of duplicate sites and all geometric degeneracies;
 - chunking, streaming, level of detail, erosion, advanced climate simulation,
-  biomes, full hydrology such as basin-wide runoff, lakes, and floodplains, roads,
-  settlements, or serialization;
+  advanced biomes, full hydrology such as basin-wide runoff, simulated lake
+  levels, and floodplains, roads, settlements, or serialization;
 - stable performance/memory guarantees for production-sized worlds;
 - a polygon-rendering Godot demo and supported-platform release packages.
 

@@ -83,8 +83,8 @@ public:
     void setOceanHumidityDistanceRatio(double ratio);
     [[nodiscard]] double oceanHumidityDistanceRatio() const noexcept;
 
-    void setLandTypeSnowTemperature(double temperature);
-    [[nodiscard]] double landTypeSnowTemperature() const noexcept;
+    void setLandTypePolarTemperature(double temperature);
+    [[nodiscard]] double landTypePolarTemperature() const noexcept;
 
     void setLandTypeColdTemperature(double temperature);
     [[nodiscard]] double landTypeColdTemperature() const noexcept;
@@ -104,14 +104,14 @@ public:
     void setLandTypeLushVegetation(double vegetation);
     [[nodiscard]] double landTypeLushVegetation() const noexcept;
 
-    void setLandTypeLowlandElevation(double elevation);
-    [[nodiscard]] double landTypeLowlandElevation() const noexcept;
+    void setLandTypeWetlandElevation(double elevation);
+    [[nodiscard]] double landTypeWetlandElevation() const noexcept;
 
-    void setLandTypeHillElevation(double elevation);
-    [[nodiscard]] double landTypeHillElevation() const noexcept;
+    void setLandformHillElevation(double elevation);
+    [[nodiscard]] double landformHillElevation() const noexcept;
 
-    void setLandTypeMountainElevation(double elevation);
-    [[nodiscard]] double landTypeMountainElevation() const noexcept;
+    void setLandformMountainElevation(double elevation);
+    [[nodiscard]] double landformMountainElevation() const noexcept;
 
     void setRiverSourceCount(std::int64_t count);
     [[nodiscard]] std::int64_t riverSourceCount() const noexcept;
@@ -179,16 +179,16 @@ private:
     double m_temperatureLatitudeExponent{1.0};
     double m_oceanHumidityCoefficient{0.2};
     double m_oceanHumidityDistanceRatio{0.12};
-    double m_landTypeSnowTemperature{0.0};
+    double m_landTypePolarTemperature{0.0};
     double m_landTypeColdTemperature{6.0};
     double m_landTypeHotTemperature{20.0};
     double m_landTypeDryHumidity{0.45};
     double m_landTypeWetHumidity{0.62};
     double m_landTypeSparseVegetation{0.45};
     double m_landTypeLushVegetation{0.54};
-    double m_landTypeLowlandElevation{0.18};
-    double m_landTypeHillElevation{0.38};
-    double m_landTypeMountainElevation{0.68};
+    double m_landTypeWetlandElevation{0.18};
+    double m_landformHillElevation{0.38};
+    double m_landformMountainElevation{0.68};
     std::int64_t m_riverSourceCount{12};
     double m_riverMinimumSourceElevation{0.6};
     double m_riverRandomness{0.25};

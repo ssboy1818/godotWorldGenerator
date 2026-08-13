@@ -1,5 +1,6 @@
 #include "ClimateGenerator.h"
 #include "Id.h"
+#include "Landform.h"
 #include "LandType.h"
 #include "PerlinNoise.h"
 #include "ProvinceGenerator.h"
@@ -527,6 +528,62 @@ void testEffectiveSeaLevel() {
     }
 }
 
+void testWaterConnectivityTypes() {
+    const WorldGenerationSettings settings{
+        .bounds = {{0.0, 0.0}, {2048.0, 2048.0}},
+    };
+    const auto world = WorldGenerator{settings}.generate();
+    std::vector<bool> expectedSea(world.regions().size(), false);
+    std::vector<CellId> pending;
+    constexpr auto boundaryTolerance = 1e-7;
+    for (const auto &cell : world.division().cells) {
+        const auto touchesBoundary = std::ranges::any_of(
+            cell.vertices,
+            [&](Vector2d vertex) {
+                return std::abs(vertex.x - settings.bounds.min.x)
+                           <= boundaryTolerance
+                    || std::abs(vertex.x - settings.bounds.max.x)
+                           <= boundaryTolerance
+                    || std::abs(vertex.y - settings.bounds.min.y)
+                           <= boundaryTolerance
+                    || std::abs(vertex.y - settings.bounds.max.y)
+                           <= boundaryTolerance;
+            });
+        if (world.regions()[cell.id].isWater() && touchesBoundary) {
+            expectedSea[cell.id] = true;
+            pending.push_back(cell.id);
+        }
+    }
+    for (std::size_t next = 0; next < pending.size(); ++next) {
+        for (const auto neighbor : world.division().cells[pending[next]].neighbors) {
+            if (expectedSea[neighbor]
+                || !world.regions()[neighbor].isWater()) {
+                continue;
+            }
+            expectedSea[neighbor] = true;
+            pending.push_back(neighbor);
+        }
+    }
+
+    auto seaCount = std::size_t{0};
+    auto lakeCount = std::size_t{0};
+    for (const auto &region : world.regions()) {
+        if (region.isLand()) {
+            require(region.type() == RegionType::Land,
+                    "A land region has a water region type.");
+            continue;
+        }
+        require(region.isSea() == expectedSea[region.id()],
+                "Water connectivity produced an incorrect sea/lake type.");
+        require(region.isLake() != region.isSea(),
+                "A water region is not exactly one of sea or lake.");
+        seaCount += region.isSea();
+        lakeCount += region.isLake();
+    }
+    require(seaCount > 0, "The default world generated no boundary sea.");
+    require(lakeCount > 0, "The water-type fixture generated no inland lake.");
+}
+
 void testEdgeStrengthValidation() {
     auto settings = WorldGenerationSettings{
         .bounds = {{0.0, 0.0}, {10.0, 10.0}},
@@ -610,6 +667,8 @@ void testRegionClimate() {
                     "A water region references a land climate sample.");
             require(!region.hasLandType(),
                     "A water region has a land type.");
+            require(!region.hasLandform(),
+                    "A water region has a landform.");
             ++waterRegionCount;
             continue;
         }
@@ -618,6 +677,8 @@ void testRegionClimate() {
                 "A land region does not reference a climate sample.");
         require(region.hasLandType(),
                 "A land region does not have a land type.");
+        require(region.hasLandform(),
+                "A land region does not have a landform.");
         require(region.landClimateId() == expectedLandClimate,
                 "Land climate IDs are not compact and ordered by region ID.");
         const auto &cell = world.division().cells.at(region.cell());
@@ -650,6 +711,13 @@ void testRegionClimate() {
                 "A region stores an incorrect land type.");
         require(region.landType() == repeatedRegion.landType(),
                 "Land types are not deterministic.");
+        require(region.landform()
+                    == classifyLandform(normalizedLandElevation(region,
+                                                                 maximumRelief),
+                                        settings.landformConditions),
+                "A region stores an incorrect landform.");
+        require(region.landform() == repeatedRegion.landform(),
+                "Landforms are not deterministic.");
         ++expectedLandClimate;
     }
     require(expectedLandClimate == world.landClimates().size(),
@@ -664,10 +732,12 @@ void testDefaultLandTypeDiversity() {
     };
     const auto world = WorldGenerator{settings}.generate();
     std::array<std::size_t, 10> counts{};
+    std::array<std::size_t, 3> landformCounts{};
     for (const auto &region : world.regions()) {
         if (!region.isLand())
             continue;
         ++counts[static_cast<std::size_t>(region.landType())];
+        ++landformCounts[static_cast<std::size_t>(region.landform())];
         if (region.landType() != LandType::Desert)
             continue;
 
@@ -682,22 +752,91 @@ void testDefaultLandTypeDiversity() {
     }
 
     const auto landCount = world.landClimates().size();
-    const auto mountainCount =
-        counts[static_cast<std::size_t>(LandType::Mountain)]
-        + counts[static_cast<std::size_t>(LandType::SnowPeaks)];
-    require(mountainCount > 0,
+    require(landformCounts[static_cast<std::size_t>(Landform::Mountain)] > 0,
             "Default actual-relief normalization produced no mountains.");
-    require(counts[static_cast<std::size_t>(LandType::Hills)] > 0,
+    require(landformCounts[static_cast<std::size_t>(Landform::Hill)] > 0,
             "Default actual-relief normalization produced no hills.");
-    require(counts[static_cast<std::size_t>(LandType::Fields)] * 4
+    require(counts[static_cast<std::size_t>(LandType::Grassland)] * 4
                 < landCount * 3,
-            "Fields still occupy at least three quarters of default land.");
+            "Grassland occupies at least three quarters of default land.");
     require(std::ranges::count_if(counts,
                                   [](std::size_t count) {
                                       return count > 0;
                                   })
                 >= 7,
             "The default world generated fewer than seven land types.");
+}
+
+void testLatitudeBiomeBands() {
+    auto settings = WorldGenerationSettings{
+        .bounds = {{0.0, 0.0}, {2048.0, 2048.0}},
+        .seed = 17,
+        .columns = 64,
+        .rows = 64,
+        .seaLevel = 0.3,
+        .edgeStrength = 0.3,
+        .temperatureNoiseStrength = 0.0,
+        .temperatureElevationCooling = 0.0,
+        .temperatureHumidityInfluence = 0.0,
+        .riverSourceCount = 0,
+    };
+    const auto world = WorldGenerator{settings}.generate();
+    const auto temperatureBand = [&](const Region &region) {
+        const auto temperature = world.landClimates()
+                                     .at(region.landClimateId())
+                                     .temperature;
+        if (temperature <= settings.landTypeConditions.polarTemperature)
+            return 0;
+        if (temperature <= settings.landTypeConditions.coldTemperature)
+            return 1;
+        if (temperature < settings.landTypeConditions.hotTemperature)
+            return 2;
+        return 3;
+    };
+
+    std::array<std::size_t, 4> bandCounts{};
+    auto adjacentLandPairs = std::size_t{0};
+    auto sameBandPairs = std::size_t{0};
+    for (const auto &region : world.regions()) {
+        if (!region.isLand())
+            continue;
+        const auto band = temperatureBand(region);
+        ++bandCounts[static_cast<std::size_t>(band)];
+        const auto type = region.landType();
+        if (band == 0) {
+            require(type == LandType::Tundra,
+                    "A polar region escaped the tundra band.");
+        } else if (band == 1) {
+            require(type == LandType::Tundra
+                        || type == LandType::BorealForest,
+                    "A cool region escaped the tundra/boreal band.");
+        } else if (band == 2) {
+            require(type == LandType::Grassland
+                        || type == LandType::TemperateForest
+                        || type == LandType::Steppe
+                        || type == LandType::Wetland,
+                    "A temperate region escaped the temperate biome band.");
+        } else {
+            require(type == LandType::Desert
+                        || type == LandType::Savanna
+                        || type == LandType::TropicalForest
+                        || type == LandType::Rainforest,
+                    "A hot region escaped the tropical biome band.");
+        }
+
+        for (const auto neighbor : world.division().cells[region.cell()].neighbors) {
+            if (neighbor <= region.cell() || !world.regions()[neighbor].isLand())
+                continue;
+            ++adjacentLandPairs;
+            sameBandPairs += temperatureBand(world.regions()[neighbor]) == band;
+        }
+    }
+    require(std::ranges::none_of(bandCounts,
+                                 [](std::size_t count) { return count == 0; }),
+            "The latitude fixture did not produce every temperature band.");
+    require(adjacentLandPairs > 0
+                && sameBandPairs * 5 >= adjacentLandPairs * 4,
+            "Latitude temperature bands are not spatially grouped.");
 }
 
 void testClimateSettingsValidation() {
@@ -832,6 +971,24 @@ void testClimateSettingsValidation() {
     try {
         static_cast<void>(WorldGenerator{settings});
         require(false, "Overlapping land type humidity conditions were accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.landTypeConditions = {};
+    settings.landTypeConditions.polarTemperature =
+        settings.landTypeConditions.coldTemperature;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "Overlapping land type temperature bands were accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.landTypeConditions = {};
+    settings.landformConditions.hillElevation =
+        settings.landformConditions.mountainElevation;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false, "Overlapping landform elevations were accepted.");
     } catch (const std::invalid_argument &) {
     }
 }
@@ -1639,9 +1796,11 @@ int main() {
         testFractalNoise();
         testSmoothEdgeDecay();
         testEffectiveSeaLevel();
+        testWaterConnectivityTypes();
         testEdgeStrengthValidation();
         testRegionClimate();
         testDefaultLandTypeDiversity();
+        testLatitudeBiomeBands();
         testClimateSettingsValidation();
         testOceanHumidity();
         testProvinceBudgets();

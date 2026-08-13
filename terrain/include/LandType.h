@@ -7,20 +7,20 @@
 namespace worldgen {
 
 enum class LandType : std::uint8_t {
-    Mountain = 0,
-    SnowPeaks = 1,
-    Hills = 2,
-    Fields = 3,
-    Forest = 4,
-    Sparse = 5,
+    Tundra = 0,
+    BorealForest = 1,
+    Grassland = 2,
+    TemperateForest = 3,
+    Steppe = 4,
+    Wetland = 5,
     Desert = 6,
-    Swamp = 7,
-    Rainforest = 8,
-    Tundra = 9,
+    Savanna = 7,
+    TropicalForest = 8,
+    Rainforest = 9,
 };
 
 struct LandTypeConditions {
-    double snowTemperature{0.0};
+    double polarTemperature{0.0};
     double coldTemperature{6.0};
     double hotTemperature{20.0};
 
@@ -30,9 +30,7 @@ struct LandTypeConditions {
     double sparseVegetation{0.45};
     double lushVegetation{0.54};
 
-    double lowlandElevation{0.18};
-    double hillElevation{0.38};
-    double mountainElevation{0.68};
+    double wetlandElevation{0.18};
 };
 
 [[nodiscard]] bool isValidLandType(LandType landType) noexcept;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Landform.h"
 #include "LandType.h"
 #include "River.h"
 #include "WorldDivision.h"
@@ -22,8 +23,9 @@ using ProvinceId = std::uint32_t;
 inline constexpr auto INVALID_PROVINCE_ID = std::numeric_limits<ProvinceId>::max();
 
 enum class RegionType {
-    Water,
-    Land,
+    Sea = 0,
+    Lake = 1,
+    Land = 2,
 };
 
 class Region {
@@ -36,7 +38,7 @@ public:
         : m_cell(cell),
           m_elevation(elevation),
           m_seaLevel(seaLevel),
-          m_type(elevation < seaLevel ? RegionType::Water : RegionType::Land),
+          m_type(elevation < seaLevel ? RegionType::Lake : RegionType::Land),
           m_landClimateId(landClimateId),
           m_edgeRivers(edgeCount, INVALID_RIVER_ID) {
         if (isLand() != hasLandClimate()) {
@@ -66,11 +68,25 @@ public:
     }
 
     [[nodiscard]] bool isWater() const noexcept {
-        return m_type == RegionType::Water;
+        return isSea() || isLake();
     }
 
     [[nodiscard]] bool isLand() const noexcept {
         return m_type == RegionType::Land;
+    }
+
+    [[nodiscard]] bool isSea() const noexcept {
+        return m_type == RegionType::Sea;
+    }
+
+    [[nodiscard]] bool isLake() const noexcept {
+        return m_type == RegionType::Lake;
+    }
+
+    void markAsSea() {
+        if (!isWater())
+            throw std::logic_error("A land region cannot be marked as sea.");
+        m_type = RegionType::Sea;
     }
 
     [[nodiscard]] LandClimateId landClimateId() const noexcept {
@@ -101,6 +117,28 @@ public:
                 "A land region cannot have two land types.");
         }
         m_landType = landType;
+    }
+
+    [[nodiscard]] Landform landform() const {
+        if (!m_landform.has_value())
+            throw std::logic_error("A region does not have a landform.");
+        return *m_landform;
+    }
+
+    [[nodiscard]] bool hasLandform() const noexcept {
+        return m_landform.has_value();
+    }
+
+    void setLandform(Landform landform) {
+        if (!isLand())
+            throw std::logic_error("A water region cannot have a landform.");
+        if (!isValidLandform(landform))
+            throw std::invalid_argument("A region needs a valid landform.");
+        if (m_landform.has_value() && *m_landform != landform) {
+            throw std::logic_error(
+                "A land region cannot have two landforms.");
+        }
+        m_landform = landform;
     }
 
     [[nodiscard]] ProvinceId provinceId() const noexcept {
@@ -166,6 +204,7 @@ private:
     RegionType m_type;
     LandClimateId m_landClimateId;
     std::optional<LandType> m_landType;
+    std::optional<Landform> m_landform;
     ProvinceId m_provinceId{INVALID_PROVINCE_ID};
     std::vector<RiverId> m_edgeRivers;
 };

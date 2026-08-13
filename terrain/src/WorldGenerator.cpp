@@ -3,6 +3,7 @@
 #include "ClimateGenerator.h"
 #include "Fortune.h"
 #include "JitteredGridSiteGenerator.h"
+#include "Landform.h"
 #include "LandType.h"
 #include "NumericalPolicy.h"
 #include "PerlinNoise.h"
@@ -116,6 +117,7 @@ void validateSettings(const WorldGenerationSettings &settings) {
             "Ocean humidity distance ratio must be between zero and one.");
     }
     validateLandTypeConditions(settings.landTypeConditions);
+    validateLandformConditions(settings.landformConditions);
     if (!std::isfinite(settings.riverMinimumSourceElevation)
         || settings.riverMinimumSourceElevation < 0.0
         || settings.riverMinimumSourceElevation > 1.0) {
@@ -241,25 +243,25 @@ void applyRiverClimateInfluence(
     });
 }
 
-[[nodiscard]] std::vector<bool> findOceanCells(
+[[nodiscard]] std::vector<bool> findSeaCells(
     const BoundingBox &boundingBox,
     const WorldDivision &division,
     std::span<const Region> regions) {
     if (division.cells.size() != regions.size()) {
         throw std::logic_error(
-            "Ocean humidity requires one region per cell.");
+            "Water classification requires one region per cell.");
     }
 
-    std::vector<bool> ocean(division.cells.size(), false);
+    std::vector<bool> sea(division.cells.size(), false);
     std::queue<CellId> pending;
     for (const auto &cell : division.cells) {
         if (cell.id >= regions.size() || regions[cell.id].cell() != cell.id) {
             throw std::logic_error(
-                "Ocean humidity received invalid cell or region IDs.");
+                "Water classification received invalid cell or region IDs.");
         }
         if (regions[cell.id].isWater()
             && cellTouchesBoundary(boundingBox, cell)) {
-            ocean[cell.id] = true;
+            sea[cell.id] = true;
             pending.push(cell.id);
         }
     }
@@ -270,15 +272,25 @@ void applyRiverClimateInfluence(
         for (const auto neighbor : division.cells[cell].neighbors) {
             if (neighbor >= regions.size()) {
                 throw std::logic_error(
-                    "An ocean cell references an invalid neighbor.");
+                    "A sea cell references an invalid neighbor.");
             }
-            if (ocean[neighbor] || !regions[neighbor].isWater())
+            if (sea[neighbor] || !regions[neighbor].isWater())
                 continue;
-            ocean[neighbor] = true;
+            sea[neighbor] = true;
             pending.push(neighbor);
         }
     }
-    return ocean;
+    return sea;
+}
+
+void classifyWaterRegions(const BoundingBox &boundingBox,
+                          const WorldDivision &division,
+                          std::span<Region> regions) {
+    const auto sea = findSeaCells(boundingBox, division, regions);
+    for (std::size_t cell = 0; cell < sea.size(); ++cell) {
+        if (sea[cell])
+            regions[cell].markAsSea();
+    }
 }
 
 void applyOceanHumidityInfluence(
@@ -291,7 +303,6 @@ void applyOceanHumidityInfluence(
     if (coefficient == 0.0 || distanceRatio == 0.0)
         return;
 
-    const auto ocean = findOceanCells(boundingBox, division, regions);
     const auto diagonal = (boundingBox.max - boundingBox.min).length();
     const auto maximumDistance = diagonal * distanceRatio;
     std::vector<double> distance(
@@ -308,14 +319,14 @@ void applyOceanHumidityInfluence(
         distance[cell] = 0.0;
         pending.emplace(0.0, cell);
     };
-    for (CellId cell = 0; cell < ocean.size(); ++cell) {
-        if (!ocean[cell])
+    for (CellId cell = 0; cell < regions.size(); ++cell) {
+        if (!regions[cell].isSea())
             continue;
         seed(cell);
         for (const auto neighbor : division.cells[cell].neighbors) {
             if (neighbor >= regions.size()) {
                 throw std::logic_error(
-                    "An ocean cell references an invalid neighbor.");
+                    "A sea cell references an invalid neighbor.");
             }
             if (regions[neighbor].isLand())
                 seed(neighbor);
@@ -455,6 +466,22 @@ void classifyLandRegions(std::span<Region> regions,
     }
 }
 
+void classifyLandforms(std::span<Region> regions,
+                       std::span<const double> normalizedElevations,
+                       const LandformConditions &conditions) {
+    for (auto &region : regions) {
+        if (!region.isLand())
+            continue;
+        if (region.landClimateId() >= normalizedElevations.size()) {
+            throw std::logic_error(
+                "Landform classification received invalid region data.");
+        }
+        region.setLandform(classifyLandform(
+            normalizedElevations[region.landClimateId()],
+            conditions));
+    }
+}
+
 } // namespace
 
 WorldGenerator::WorldGenerator(WorldGenerationSettings settings)
@@ -542,6 +569,8 @@ World WorldGenerator::generate() const {
         }
     }
 
+    classifyWaterRegions(boundingBox, division, regions);
+
     auto rivers = generateRivers(boundingBox,
                                  division,
                                  regions,
@@ -565,6 +594,9 @@ World WorldGenerator::generate() const {
     const auto normalizedLandElevations = normalizeLandElevations(
         regions,
         landClimates.size());
+    classifyLandforms(regions,
+                      normalizedLandElevations,
+                      m_settings.landformConditions);
     finalizeLandTemperatures(division,
                              regions,
                              landClimates,

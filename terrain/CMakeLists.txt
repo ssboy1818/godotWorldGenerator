@@ -1,5 +1,6 @@
 add_library(worldgen_terrain STATIC
     src/JitteredGridSiteGenerator.cpp
+    src/Landform.cpp
     src/LandType.cpp
     src/Province.cpp
     src/ProvinceGenerator.cpp

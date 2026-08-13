@@ -2,7 +2,7 @@
 
 Worldgen is a Godot 4.4 GDExtension backed by an engine-independent C++23 core.
 It synchronously generates a bounded Voronoi world with deterministic terrain
-elevation, land/water classification, cell adjacency, and rivers that follow
+elevation, land/sea/lake classification, cell adjacency, and rivers that follow
 Voronoi borders downhill from high inland vertices. Regions are also grouped into
 deterministic, contiguous provinces using configurable terrain and river costs.
 An independent climate layer adds seeded temperature, humidity, and vegetation
@@ -83,16 +83,16 @@ settings.temperature_humidity_influence = 4.0
 settings.temperature_latitude_exponent = 1.0
 settings.ocean_humidity_coefficient = 0.2
 settings.ocean_humidity_distance_ratio = 0.12
-settings.land_type_snow_temperature = 0.0
+settings.land_type_polar_temperature = 0.0
 settings.land_type_cold_temperature = 6.0
 settings.land_type_hot_temperature = 20.0
 settings.land_type_dry_humidity = 0.45
 settings.land_type_wet_humidity = 0.62
 settings.land_type_sparse_vegetation = 0.45
 settings.land_type_lush_vegetation = 0.54
-settings.land_type_lowland_elevation = 0.18
-settings.land_type_hill_elevation = 0.38
-settings.land_type_mountain_elevation = 0.68
+settings.land_type_wetland_elevation = 0.18
+settings.landform_hill_elevation = 0.38
+settings.landform_mountain_elevation = 0.68
 settings.river_source_count = 12
 settings.river_minimum_source_elevation = 0.6
 settings.river_randomness = 0.25
@@ -125,13 +125,16 @@ for cell in world.cell_count:
 `sites`, `elevations`, `region_land_indices`, and `region_types` contain one
 entry per cell. Water regions have `-1` in `region_land_indices`. Land region
 `i` uses that value as an index into the compact `land_region_ids`,
-`land_temperatures`, `land_humidities`, `land_vegetations`, and `land_types`
+`land_temperatures`, `land_humidities`, `land_vegetations`, `land_types`, and
+`landforms`
 arrays; `land_region_ids` provides the inverse mapping back to the region/cell
 ID.
 `cell_vertex_offsets` and `neighbor_offsets` contain `cell_count + 1` entries, so
 cell `i` uses the half-open ranges `[offsets[i], offsets[i + 1])` in the shared
 `vertices` and `neighbors` arrays. Region type constants are available as
-`VoronoiWorldData.REGION_TYPE_WATER` and `VoronoiWorldData.REGION_TYPE_LAND`.
+`VoronoiWorldData.REGION_TYPE_SEA`, `VoronoiWorldData.REGION_TYPE_LAKE`, and
+`VoronoiWorldData.REGION_TYPE_LAND`. A sea is boundary-connected water; every
+other water component is a lake.
 
 Climate values are sampled only for land cells at their site positions, the same
 positions used for elevation. Humidity and vegetation use independent
@@ -145,7 +148,7 @@ river_vegetation_coefficient`, respectively, and are also clamped to `[0, 1]`.
 Both river climate coefficients are in `[0, 1]`; setting either one to zero
 disables that contribution.
 
-Boundary-connected water is treated as ocean. Ocean-adjacent land receives the
+Boundary-connected water is classified as sea. Sea-adjacent land receives the
 full `ocean_humidity_coefficient`, and the contribution decays smoothly to zero
 over `ocean_humidity_distance_ratio * world bounds diagonal`. Only humidity is
 changed. A zero coefficient or distance ratio disables ocean humidity. Inland
@@ -171,7 +174,7 @@ Elevation uses actual generated relief: each land region's height above its loca
 effective sea level is divided by the greatest land relief in that world. This
 makes the highest land `1`, keeps coast-level land near `0`, and avoids comparing
 ordinary generated terrain with an unreachable theoretical elevation of `1`.
-The same normalized value drives temperature cooling and land classification.
+The same normalized value drives temperature cooling and landform classification.
 The centered humidity term weakly warms dry land and cools wet land without
 shifting a neutral humidity of `0.5`. Set either influence to zero to disable it.
 Both endpoint temperatures must be in `[-50, 50]`, the pole cannot be warmer than
@@ -179,29 +182,32 @@ the equator, and the finalized result is clamped to that range. Noise strength,
 elevation cooling, and humidity influence are in `[0, 100]`; noise frequency must
 be positive, and the latitude exponent is in `(0, 10]`.
 
-Each land region is classified after river and ocean contributions and final
-temperature are applied.
-Elevation uses the shared actual-relief normalization described above. Land-type
-settings define shared condition boundaries and must satisfy
-`snow <= cold < hot`, `dry < wet`, `sparse < lush`, and
-`lowland < hill < mountain`. Classification combines conditions in the following
-priority order:
+Each land region receives a climate biome after river and ocean contributions and
+final temperature are applied. Temperature first selects a polar/cool,
+temperate, or tropical band; humidity and vegetation select a biome only inside
+that band. This gives latitude a strong influence while the low-frequency climate
+fields keep neighboring regions grouped. Land-type settings must satisfy
+`polar < cold < hot`, `dry < wet`, and `sparse < lush`.
 
 | Land type | Rule |
 | --- | --- |
-| `LAND_TYPE_SNOW_PEAKS` | elevation at least `mountain` and temperature at most `snow` |
-| `LAND_TYPE_MOUNTAIN` | elevation at least `mountain` and temperature above `snow` |
-| `LAND_TYPE_TUNDRA` | temperature at most `cold` and vegetation at most `sparse` |
-| `LAND_TYPE_HILLS` | elevation at least `hill` and temperature above `cold` |
-| `LAND_TYPE_SWAMP` | elevation at most `lowland`, temperature above `cold`, humidity at least `wet`, and vegetation at least `lush` |
-| `LAND_TYPE_RAINFOREST` | temperature at least `hot`, humidity at least `wet`, and vegetation at least `lush` |
-| `LAND_TYPE_DESERT` | temperature at least `hot`, humidity at most `dry`, and vegetation at most `sparse` |
-| `LAND_TYPE_FOREST` | temperature above `cold`, humidity above `dry`, and vegetation at least `lush` |
-| `LAND_TYPE_SPARSE` | humidity at most `dry` and vegetation at most `sparse` |
-| `LAND_TYPE_FIELDS` | all remaining land |
+| `LAND_TYPE_TUNDRA` | polar land, or cool land without enough moisture and vegetation for boreal forest |
+| `LAND_TYPE_BOREAL_FOREST` | cool, non-dry, lush land |
+| `LAND_TYPE_WETLAND` | temperate, wet, lush land no higher than `wetland_elevation` |
+| `LAND_TYPE_STEPPE` | temperate, dry, sparse land |
+| `LAND_TYPE_TEMPERATE_FOREST` | temperate, non-dry, lush land |
+| `LAND_TYPE_GRASSLAND` | remaining temperate land |
+| `LAND_TYPE_DESERT` | tropical, dry, sparse land |
+| `LAND_TYPE_RAINFOREST` | tropical, wet, lush land |
+| `LAND_TYPE_TROPICAL_FOREST` | tropical, non-dry, lush land that is not rainforest |
+| `LAND_TYPE_SAVANNA` | remaining tropical land |
 
-`land_types` is aligned with the other compact land-only arrays. Water regions
-do not have a land type and retain `-1` in `region_land_indices`.
+Mountains and hills are landforms, not land types. `LANDFORM_PLAIN`,
+`LANDFORM_HILL`, and `LANDFORM_MOUNTAIN` are classified independently from
+normalized relief using `landform_hill_elevation` and
+`landform_mountain_elevation`. `land_types` and `landforms` are aligned with the
+other compact land-only arrays. Water regions have neither and retain `-1` in
+`region_land_indices`.
 
 River `i` occupies `[river_offsets[i], river_offsets[i + 1])` in the flattened
 `river_vertices` and `river_strengths` arrays. Each source contributes unit flow;

@@ -120,11 +120,11 @@ void WorldgenSettings::_bind_methods() {
         godot::D_METHOD("get_ocean_humidity_distance_ratio"),
         &WorldgenSettings::oceanHumidityDistanceRatio);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("set_land_type_snow_temperature", "temperature"),
-        &WorldgenSettings::setLandTypeSnowTemperature);
+        godot::D_METHOD("set_land_type_polar_temperature", "temperature"),
+        &WorldgenSettings::setLandTypePolarTemperature);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("get_land_type_snow_temperature"),
-        &WorldgenSettings::landTypeSnowTemperature);
+        godot::D_METHOD("get_land_type_polar_temperature"),
+        &WorldgenSettings::landTypePolarTemperature);
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_land_type_cold_temperature", "temperature"),
         &WorldgenSettings::setLandTypeColdTemperature);
@@ -162,23 +162,23 @@ void WorldgenSettings::_bind_methods() {
         godot::D_METHOD("get_land_type_lush_vegetation"),
         &WorldgenSettings::landTypeLushVegetation);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("set_land_type_lowland_elevation", "elevation"),
-        &WorldgenSettings::setLandTypeLowlandElevation);
+        godot::D_METHOD("set_land_type_wetland_elevation", "elevation"),
+        &WorldgenSettings::setLandTypeWetlandElevation);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("get_land_type_lowland_elevation"),
-        &WorldgenSettings::landTypeLowlandElevation);
+        godot::D_METHOD("get_land_type_wetland_elevation"),
+        &WorldgenSettings::landTypeWetlandElevation);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("set_land_type_hill_elevation", "elevation"),
-        &WorldgenSettings::setLandTypeHillElevation);
+        godot::D_METHOD("set_landform_hill_elevation", "elevation"),
+        &WorldgenSettings::setLandformHillElevation);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("get_land_type_hill_elevation"),
-        &WorldgenSettings::landTypeHillElevation);
+        godot::D_METHOD("get_landform_hill_elevation"),
+        &WorldgenSettings::landformHillElevation);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("set_land_type_mountain_elevation", "elevation"),
-        &WorldgenSettings::setLandTypeMountainElevation);
+        godot::D_METHOD("set_landform_mountain_elevation", "elevation"),
+        &WorldgenSettings::setLandformMountainElevation);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("get_land_type_mountain_elevation"),
-        &WorldgenSettings::landTypeMountainElevation);
+        godot::D_METHOD("get_landform_mountain_elevation"),
+        &WorldgenSettings::landformMountainElevation);
     godot::ClassDB::bind_method(godot::D_METHOD("set_river_source_count", "count"),
                                 &WorldgenSettings::setRiverSourceCount);
     godot::ClassDB::bind_method(godot::D_METHOD("get_river_source_count"),
@@ -380,11 +380,11 @@ void WorldgenSettings::_bind_methods() {
 
     ADD_GROUP("Land Types", "land_type_");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
-                                     "land_type_snow_temperature",
+                                     "land_type_polar_temperature",
                                      godot::PROPERTY_HINT_RANGE,
                                      "-50,50,0.1"),
-                 "set_land_type_snow_temperature",
-                 "get_land_type_snow_temperature");
+                 "set_land_type_polar_temperature",
+                 "get_land_type_polar_temperature");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
                                      "land_type_cold_temperature",
                                      godot::PROPERTY_HINT_RANGE,
@@ -422,23 +422,25 @@ void WorldgenSettings::_bind_methods() {
                  "set_land_type_lush_vegetation",
                  "get_land_type_lush_vegetation");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
-                                     "land_type_lowland_elevation",
+                                     "land_type_wetland_elevation",
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1,0.001"),
-                 "set_land_type_lowland_elevation",
-                 "get_land_type_lowland_elevation");
+                 "set_land_type_wetland_elevation",
+                 "get_land_type_wetland_elevation");
+
+    ADD_GROUP("Landforms", "landform_");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
-                                     "land_type_hill_elevation",
+                                     "landform_hill_elevation",
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1,0.001"),
-                 "set_land_type_hill_elevation",
-                 "get_land_type_hill_elevation");
+                 "set_landform_hill_elevation",
+                 "get_landform_hill_elevation");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
-                                     "land_type_mountain_elevation",
+                                     "landform_mountain_elevation",
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1,0.001"),
-                 "set_land_type_mountain_elevation",
-                 "get_land_type_mountain_elevation");
+                 "set_landform_mountain_elevation",
+                 "get_landform_mountain_elevation");
 
     ADD_GROUP("Rivers", "");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
@@ -703,12 +705,12 @@ double WorldgenSettings::oceanHumidityDistanceRatio() const noexcept {
     return m_oceanHumidityDistanceRatio;
 }
 
-void WorldgenSettings::setLandTypeSnowTemperature(double temperature) {
-    m_landTypeSnowTemperature = temperature;
+void WorldgenSettings::setLandTypePolarTemperature(double temperature) {
+    m_landTypePolarTemperature = temperature;
 }
 
-double WorldgenSettings::landTypeSnowTemperature() const noexcept {
-    return m_landTypeSnowTemperature;
+double WorldgenSettings::landTypePolarTemperature() const noexcept {
+    return m_landTypePolarTemperature;
 }
 
 void WorldgenSettings::setLandTypeColdTemperature(double temperature) {
@@ -759,28 +761,28 @@ double WorldgenSettings::landTypeLushVegetation() const noexcept {
     return m_landTypeLushVegetation;
 }
 
-void WorldgenSettings::setLandTypeLowlandElevation(double elevation) {
-    m_landTypeLowlandElevation = elevation;
+void WorldgenSettings::setLandTypeWetlandElevation(double elevation) {
+    m_landTypeWetlandElevation = elevation;
 }
 
-double WorldgenSettings::landTypeLowlandElevation() const noexcept {
-    return m_landTypeLowlandElevation;
+double WorldgenSettings::landTypeWetlandElevation() const noexcept {
+    return m_landTypeWetlandElevation;
 }
 
-void WorldgenSettings::setLandTypeHillElevation(double elevation) {
-    m_landTypeHillElevation = elevation;
+void WorldgenSettings::setLandformHillElevation(double elevation) {
+    m_landformHillElevation = elevation;
 }
 
-double WorldgenSettings::landTypeHillElevation() const noexcept {
-    return m_landTypeHillElevation;
+double WorldgenSettings::landformHillElevation() const noexcept {
+    return m_landformHillElevation;
 }
 
-void WorldgenSettings::setLandTypeMountainElevation(double elevation) {
-    m_landTypeMountainElevation = elevation;
+void WorldgenSettings::setLandformMountainElevation(double elevation) {
+    m_landformMountainElevation = elevation;
 }
 
-double WorldgenSettings::landTypeMountainElevation() const noexcept {
-    return m_landTypeMountainElevation;
+double WorldgenSettings::landformMountainElevation() const noexcept {
+    return m_landformMountainElevation;
 }
 
 void WorldgenSettings::setRiverSourceCount(std::int64_t count) {

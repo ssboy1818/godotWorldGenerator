@@ -35,16 +35,16 @@ void validateInputs(double normalizedElevation,
 
 bool isValidLandType(LandType landType) noexcept {
     switch (landType) {
-    case LandType::Mountain:
-    case LandType::SnowPeaks:
-    case LandType::Hills:
-    case LandType::Fields:
-    case LandType::Forest:
-    case LandType::Sparse:
-    case LandType::Desert:
-    case LandType::Swamp:
-    case LandType::Rainforest:
     case LandType::Tundra:
+    case LandType::BorealForest:
+    case LandType::Grassland:
+    case LandType::TemperateForest:
+    case LandType::Steppe:
+    case LandType::Wetland:
+    case LandType::Desert:
+    case LandType::Savanna:
+    case LandType::TropicalForest:
+    case LandType::Rainforest:
         return true;
     }
     return false;
@@ -54,13 +54,13 @@ void validateLandTypeConditions(const LandTypeConditions &conditions) {
     const auto validTemperature = [](double value) {
         return std::isfinite(value) && value >= -50.0 && value <= 50.0;
     };
-    if (!validTemperature(conditions.snowTemperature)
+    if (!validTemperature(conditions.polarTemperature)
         || !validTemperature(conditions.coldTemperature)
         || !validTemperature(conditions.hotTemperature)
-        || conditions.snowTemperature > conditions.coldTemperature
+        || conditions.polarTemperature >= conditions.coldTemperature
         || conditions.coldTemperature >= conditions.hotTemperature) {
         throw std::invalid_argument(
-            "Land type temperatures must satisfy -50 <= snow <= cold < hot <= 50.");
+            "Land type temperatures must satisfy -50 <= polar < cold < hot <= 50.");
     }
 
     const auto validRatio = [](double value) {
@@ -78,13 +78,9 @@ void validateLandTypeConditions(const LandTypeConditions &conditions) {
         throw std::invalid_argument(
             "Land type vegetation must satisfy 0 <= sparse < lush <= 1.");
     }
-    if (!validRatio(conditions.lowlandElevation)
-        || !validRatio(conditions.hillElevation)
-        || !validRatio(conditions.mountainElevation)
-        || conditions.lowlandElevation >= conditions.hillElevation
-        || conditions.hillElevation >= conditions.mountainElevation) {
+    if (!validRatio(conditions.wetlandElevation)) {
         throw std::invalid_argument(
-            "Land type elevations must satisfy 0 <= lowland < hill < mountain <= 1.");
+            "Wetland elevation must be between zero and one.");
     }
 }
 
@@ -94,48 +90,47 @@ LandType classifyLandType(double normalizedElevation,
     validateInputs(normalizedElevation, climate);
     validateLandTypeConditions(conditions);
 
-    if (normalizedElevation >= conditions.mountainElevation
-        && climate.temperature <= conditions.snowTemperature) {
-        return LandType::SnowPeaks;
-    }
-    if (normalizedElevation >= conditions.mountainElevation
-        && climate.temperature > conditions.snowTemperature) {
-        return LandType::Mountain;
-    }
-    if (climate.temperature <= conditions.coldTemperature
-        && climate.vegetation <= conditions.sparseVegetation) {
+    if (climate.temperature <= conditions.polarTemperature)
+        return LandType::Tundra;
+
+    if (climate.temperature <= conditions.coldTemperature) {
+        if (climate.humidity > conditions.dryHumidity
+            && climate.vegetation >= conditions.lushVegetation) {
+            return LandType::BorealForest;
+        }
         return LandType::Tundra;
     }
-    if (normalizedElevation >= conditions.hillElevation
-        && climate.temperature > conditions.coldTemperature) {
-        return LandType::Hills;
+
+    if (climate.temperature >= conditions.hotTemperature) {
+        if (climate.humidity <= conditions.dryHumidity
+            && climate.vegetation <= conditions.sparseVegetation) {
+            return LandType::Desert;
+        }
+        if (climate.humidity >= conditions.wetHumidity
+            && climate.vegetation >= conditions.lushVegetation) {
+            return LandType::Rainforest;
+        }
+        if (climate.humidity > conditions.dryHumidity
+            && climate.vegetation >= conditions.lushVegetation) {
+            return LandType::TropicalForest;
+        }
+        return LandType::Savanna;
     }
-    if (normalizedElevation <= conditions.lowlandElevation
-        && climate.temperature > conditions.coldTemperature
+
+    if (normalizedElevation <= conditions.wetlandElevation
         && climate.humidity >= conditions.wetHumidity
         && climate.vegetation >= conditions.lushVegetation) {
-        return LandType::Swamp;
-    }
-    if (climate.temperature >= conditions.hotTemperature
-        && climate.humidity >= conditions.wetHumidity
-        && climate.vegetation >= conditions.lushVegetation) {
-        return LandType::Rainforest;
-    }
-    if (climate.temperature >= conditions.hotTemperature
-        && climate.humidity <= conditions.dryHumidity
-        && climate.vegetation <= conditions.sparseVegetation) {
-        return LandType::Desert;
-    }
-    if (climate.temperature > conditions.coldTemperature
-        && climate.humidity > conditions.dryHumidity
-        && climate.vegetation >= conditions.lushVegetation) {
-        return LandType::Forest;
+        return LandType::Wetland;
     }
     if (climate.humidity <= conditions.dryHumidity
         && climate.vegetation <= conditions.sparseVegetation) {
-        return LandType::Sparse;
+        return LandType::Steppe;
     }
-    return LandType::Fields;
+    if (climate.humidity > conditions.dryHumidity
+        && climate.vegetation >= conditions.lushVegetation) {
+        return LandType::TemperateForest;
+    }
+    return LandType::Grassland;
 }
 
 } // namespace worldgen

@@ -10,16 +10,22 @@ func _initialize() -> void:
     assert(ClassDB.is_parent_class("VoronoiWorldGenerator", "RefCounted"))
     assert(ClassDB.is_parent_class("VoronoiWorldData", "RefCounted"))
     assert(ClassDB.is_parent_class("VoronoiWorld2D", "Node2D"))
-    assert(VoronoiWorldData.LAND_TYPE_MOUNTAIN == 0)
-    assert(VoronoiWorldData.LAND_TYPE_SNOW_PEAKS == 1)
-    assert(VoronoiWorldData.LAND_TYPE_HILLS == 2)
-    assert(VoronoiWorldData.LAND_TYPE_FIELDS == 3)
-    assert(VoronoiWorldData.LAND_TYPE_FOREST == 4)
-    assert(VoronoiWorldData.LAND_TYPE_SPARSE == 5)
+    assert(VoronoiWorldData.REGION_TYPE_SEA == 0)
+    assert(VoronoiWorldData.REGION_TYPE_LAKE == 1)
+    assert(VoronoiWorldData.REGION_TYPE_LAND == 2)
+    assert(VoronoiWorldData.LAND_TYPE_TUNDRA == 0)
+    assert(VoronoiWorldData.LAND_TYPE_BOREAL_FOREST == 1)
+    assert(VoronoiWorldData.LAND_TYPE_GRASSLAND == 2)
+    assert(VoronoiWorldData.LAND_TYPE_TEMPERATE_FOREST == 3)
+    assert(VoronoiWorldData.LAND_TYPE_STEPPE == 4)
+    assert(VoronoiWorldData.LAND_TYPE_WETLAND == 5)
     assert(VoronoiWorldData.LAND_TYPE_DESERT == 6)
-    assert(VoronoiWorldData.LAND_TYPE_SWAMP == 7)
-    assert(VoronoiWorldData.LAND_TYPE_RAINFOREST == 8)
-    assert(VoronoiWorldData.LAND_TYPE_TUNDRA == 9)
+    assert(VoronoiWorldData.LAND_TYPE_SAVANNA == 7)
+    assert(VoronoiWorldData.LAND_TYPE_TROPICAL_FOREST == 8)
+    assert(VoronoiWorldData.LAND_TYPE_RAINFOREST == 9)
+    assert(VoronoiWorldData.LANDFORM_PLAIN == 0)
+    assert(VoronoiWorldData.LANDFORM_HILL == 1)
+    assert(VoronoiWorldData.LANDFORM_MOUNTAIN == 2)
 
     var settings := WorldgenSettings.new()
     assert(is_equal_approx(settings.edge_strength, 0.55))
@@ -47,16 +53,16 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.temperature_latitude_exponent, 1.0))
     assert(is_equal_approx(settings.ocean_humidity_coefficient, 0.2))
     assert(is_equal_approx(settings.ocean_humidity_distance_ratio, 0.12))
-    assert(is_equal_approx(settings.land_type_snow_temperature, 0.0))
+    assert(is_equal_approx(settings.land_type_polar_temperature, 0.0))
     assert(is_equal_approx(settings.land_type_cold_temperature, 6.0))
     assert(is_equal_approx(settings.land_type_hot_temperature, 20.0))
     assert(is_equal_approx(settings.land_type_dry_humidity, 0.45))
     assert(is_equal_approx(settings.land_type_wet_humidity, 0.62))
     assert(is_equal_approx(settings.land_type_sparse_vegetation, 0.45))
     assert(is_equal_approx(settings.land_type_lush_vegetation, 0.54))
-    assert(is_equal_approx(settings.land_type_lowland_elevation, 0.18))
-    assert(is_equal_approx(settings.land_type_hill_elevation, 0.38))
-    assert(is_equal_approx(settings.land_type_mountain_elevation, 0.68))
+    assert(is_equal_approx(settings.land_type_wetland_elevation, 0.18))
+    assert(is_equal_approx(settings.landform_hill_elevation, 0.38))
+    assert(is_equal_approx(settings.landform_mountain_elevation, 0.68))
     settings.bounds = Rect2(0.0, 0.0, 512.0, 512.0)
     settings.seed = 93
     settings.columns = 16
@@ -76,16 +82,16 @@ func _initialize() -> void:
     settings.temperature_latitude_exponent = 1.15
     settings.ocean_humidity_coefficient = 0.18
     settings.ocean_humidity_distance_ratio = 0.15
-    settings.land_type_snow_temperature = -1.0
+    settings.land_type_polar_temperature = -1.0
     settings.land_type_cold_temperature = 7.0
     settings.land_type_hot_temperature = 21.0
     settings.land_type_dry_humidity = 0.28
     settings.land_type_wet_humidity = 0.68
     settings.land_type_sparse_vegetation = 0.32
     settings.land_type_lush_vegetation = 0.62
-    settings.land_type_lowland_elevation = 0.14
-    settings.land_type_hill_elevation = 0.42
-    settings.land_type_mountain_elevation = 0.72
+    settings.land_type_wetland_elevation = 0.14
+    settings.landform_hill_elevation = 0.42
+    settings.landform_mountain_elevation = 0.72
     settings.river_source_count = 24
     settings.river_minimum_source_elevation = 0.5
     settings.river_randomness = 0.35
@@ -114,6 +120,7 @@ func _initialize() -> void:
     assert(world.land_humidities.size() == world.land_region_ids.size())
     assert(world.land_vegetations.size() == world.land_region_ids.size())
     assert(world.land_types.size() == world.land_region_ids.size())
+    assert(world.landforms.size() == world.land_region_ids.size())
     assert(world.region_types.size() == world.cell_count)
     assert(world.river_count > 0)
     assert(world.river_offsets.size() == world.river_count + 1)
@@ -144,8 +151,10 @@ func _initialize() -> void:
             assert(world.land_humidities[land] <= 1.0)
             assert(world.land_vegetations[land] >= 0.0)
             assert(world.land_vegetations[land] <= 1.0)
-            assert(world.land_types[land] >= VoronoiWorldData.LAND_TYPE_MOUNTAIN)
-            assert(world.land_types[land] <= VoronoiWorldData.LAND_TYPE_TUNDRA)
+            assert(world.land_types[land] >= VoronoiWorldData.LAND_TYPE_TUNDRA)
+            assert(world.land_types[land] <= VoronoiWorldData.LAND_TYPE_RAINFOREST)
+            assert(world.landforms[land] >= VoronoiWorldData.LANDFORM_PLAIN)
+            assert(world.landforms[land] <= VoronoiWorldData.LANDFORM_MOUNTAIN)
             land_type_counts[world.land_types[land]] += 1
             if world.land_types[land] == VoronoiWorldData.LAND_TYPE_DESERT:
                 assert(world.land_temperatures[land]
@@ -156,9 +165,8 @@ func _initialize() -> void:
                        <= settings.land_type_sparse_vegetation)
         else:
             assert(land == -1)
-    assert(land_type_counts[VoronoiWorldData.LAND_TYPE_MOUNTAIN]
-           + land_type_counts[VoronoiWorldData.LAND_TYPE_SNOW_PEAKS] > 0)
-    assert(land_type_counts[VoronoiWorldData.LAND_TYPE_HILLS] > 0)
+    assert(world.landforms.count(VoronoiWorldData.LANDFORM_MOUNTAIN) > 0)
+    assert(world.landforms.count(VoronoiWorldData.LANDFORM_HILL) > 0)
     var river_region_edges := 0
     for river in world.cell_edge_rivers:
         assert(river >= -1 and river < world.river_count)
@@ -219,6 +227,7 @@ func _initialize() -> void:
     assert(repeated.land_humidities == world.land_humidities)
     assert(repeated.land_vegetations == world.land_vegetations)
     assert(repeated.land_types == world.land_types)
+    assert(repeated.landforms == world.landforms)
     assert(repeated.region_types == world.region_types)
     assert(repeated.river_vertices == world.river_vertices)
     assert(repeated.river_strengths == world.river_strengths)

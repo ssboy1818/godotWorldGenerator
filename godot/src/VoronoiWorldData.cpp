@@ -42,6 +42,18 @@ void resizePacked(PackedArray &array,
         throw std::runtime_error(description);
 }
 
+[[nodiscard]] std::int32_t toGodotRegionType(RegionType type) {
+    switch (type) {
+    case RegionType::Sea:
+        return VoronoiWorldData::REGION_TYPE_SEA;
+    case RegionType::Lake:
+        return VoronoiWorldData::REGION_TYPE_LAKE;
+    case RegionType::Land:
+        return VoronoiWorldData::REGION_TYPE_LAND;
+    }
+    throw std::logic_error("A generated region has an invalid region type.");
+}
+
 } // namespace
 
 void VoronoiWorldData::_bind_methods() {
@@ -73,6 +85,8 @@ void VoronoiWorldData::_bind_methods() {
                                 &VoronoiWorldData::landVegetations);
     godot::ClassDB::bind_method(godot::D_METHOD("get_land_types"),
                                 &VoronoiWorldData::landTypes);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_landforms"),
+                                &VoronoiWorldData::landforms);
     godot::ClassDB::bind_method(godot::D_METHOD("get_region_types"),
                                 &VoronoiWorldData::regionTypes);
     godot::ClassDB::bind_method(godot::D_METHOD("get_river_count"),
@@ -100,18 +114,22 @@ void VoronoiWorldData::_bind_methods() {
     godot::ClassDB::bind_method(godot::D_METHOD("get_region_province_indices"),
                                 &VoronoiWorldData::regionProvinceIndices);
 
-    BIND_CONSTANT(REGION_TYPE_WATER);
+    BIND_CONSTANT(REGION_TYPE_SEA);
+    BIND_CONSTANT(REGION_TYPE_LAKE);
     BIND_CONSTANT(REGION_TYPE_LAND);
-    BIND_CONSTANT(LAND_TYPE_MOUNTAIN);
-    BIND_CONSTANT(LAND_TYPE_SNOW_PEAKS);
-    BIND_CONSTANT(LAND_TYPE_HILLS);
-    BIND_CONSTANT(LAND_TYPE_FIELDS);
-    BIND_CONSTANT(LAND_TYPE_FOREST);
-    BIND_CONSTANT(LAND_TYPE_SPARSE);
-    BIND_CONSTANT(LAND_TYPE_DESERT);
-    BIND_CONSTANT(LAND_TYPE_SWAMP);
-    BIND_CONSTANT(LAND_TYPE_RAINFOREST);
     BIND_CONSTANT(LAND_TYPE_TUNDRA);
+    BIND_CONSTANT(LAND_TYPE_BOREAL_FOREST);
+    BIND_CONSTANT(LAND_TYPE_GRASSLAND);
+    BIND_CONSTANT(LAND_TYPE_TEMPERATE_FOREST);
+    BIND_CONSTANT(LAND_TYPE_STEPPE);
+    BIND_CONSTANT(LAND_TYPE_WETLAND);
+    BIND_CONSTANT(LAND_TYPE_DESERT);
+    BIND_CONSTANT(LAND_TYPE_SAVANNA);
+    BIND_CONSTANT(LAND_TYPE_TROPICAL_FOREST);
+    BIND_CONSTANT(LAND_TYPE_RAINFOREST);
+    BIND_CONSTANT(LANDFORM_PLAIN);
+    BIND_CONSTANT(LANDFORM_HILL);
+    BIND_CONSTANT(LANDFORM_MOUNTAIN);
 
     constexpr auto readOnly = godot::PROPERTY_USAGE_DEFAULT
                               | godot::PROPERTY_USAGE_READ_ONLY;
@@ -199,6 +217,12 @@ void VoronoiWorldData::_bind_methods() {
                                      "",
                                      readOnly),
                  "", "get_land_types");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
+                                     "landforms",
+                                     godot::PROPERTY_HINT_NONE,
+                                     "",
+                                     readOnly),
+                 "", "get_landforms");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::PACKED_INT32_ARRAY,
                                      "region_types",
                                      godot::PROPERTY_HINT_NONE,
@@ -333,6 +357,10 @@ godot::PackedFloat64Array VoronoiWorldData::landVegetations() const {
 
 godot::PackedInt32Array VoronoiWorldData::landTypes() const {
     return m_landTypes;
+}
+
+godot::PackedInt32Array VoronoiWorldData::landforms() const {
+    return m_landforms;
 }
 
 godot::PackedInt32Array VoronoiWorldData::regionTypes() const {
@@ -479,6 +507,9 @@ void VoronoiWorldData::populate(const World &world) {
     resizePacked(m_landTypes,
                  landClimates.size(),
                  "Unable to allocate the land type array.");
+    resizePacked(m_landforms,
+                 landClimates.size(),
+                 "Unable to allocate the landform array.");
     const auto &rivers = world.rivers();
     if (rivers.size() >= maximum)
         throw std::length_error("The generated world has too many rivers for packed offsets.");
@@ -490,6 +521,7 @@ void VoronoiWorldData::populate(const World &world) {
     auto *landHumidities = m_landHumidities.ptrw();
     auto *landVegetations = m_landVegetations.ptrw();
     auto *landTypes = m_landTypes.ptrw();
+    auto *landforms = m_landforms.ptrw();
     auto *regionTypes = m_regionTypes.ptrw();
     auto *cellEdgeRivers = m_cellEdgeRivers.ptrw();
     std::vector<bool> populated(cells.size(), false);
@@ -502,9 +534,10 @@ void VoronoiWorldData::populate(const World &world) {
             throw std::logic_error("The generated world has invalid region cell IDs.");
 
         elevations[cell] = region.elevation();
-        regionTypes[cell] = region.isWater() ? REGION_TYPE_WATER : REGION_TYPE_LAND;
+        regionTypes[cell] = toGodotRegionType(region.type());
         if (region.isWater()) {
-            if (region.hasLandClimate() || region.hasLandType()) {
+            if (region.hasLandClimate() || region.hasLandType()
+                || region.hasLandform()) {
                 throw std::logic_error(
                     "A generated water region has land-only data.");
             }
@@ -531,12 +564,14 @@ void VoronoiWorldData::populate(const World &world) {
             landTemperatures[landClimate] = climate.temperature;
             landHumidities[landClimate] = climate.humidity;
             landVegetations[landClimate] = climate.vegetation;
-            if (!region.hasLandType()) {
+            if (!region.hasLandType() || !region.hasLandform()) {
                 throw std::logic_error(
-                    "A generated land region does not have a land type.");
+                    "A generated land region does not have a land type and landform.");
             }
             landTypes[landClimate] = static_cast<std::int32_t>(
                 region.landType());
+            landforms[landClimate] = static_cast<std::int32_t>(
+                region.landform());
             populatedLandClimates[landClimate] = true;
         }
         if (region.edgeRivers().size() != cells[cell].vertices.size()) {

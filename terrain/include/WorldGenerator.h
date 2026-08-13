@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Landform.h"
 #include "LandType.h"
 #include "World.h"
 
@@ -38,6 +39,7 @@ struct WorldGenerationSettings {
     double oceanHumidityDistanceRatio{0.12};
 
     LandTypeConditions landTypeConditions;
+    LandformConditions landformConditions;
 
     std::size_t riverSourceCount{12};
     double riverMinimumSourceElevation{0.6};
