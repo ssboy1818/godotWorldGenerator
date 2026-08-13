@@ -108,6 +108,7 @@ settings.province_distance_contribution = 5.0
 settings.province_land_type_contribution = 5.0
 settings.province_short_border_contribution = 5.0
 settings.province_base_cost = 1.0
+settings.province_seed_minimum_distance = 4.0
 settings.province_minimum_region_count = 3
 settings.province_maximum_region_count = 0 # unlimited
 generator.settings = settings
@@ -251,10 +252,37 @@ water are retained. A routing step may rise by at most
 the river on the polygon edge from `vertices[j]` to the next vertex of that cell,
 or is `-1`. Use `cell_vertex_offsets` to find each cell's edge range.
 
-Province generation runs after rivers and considers land regions only. The
-lowest-ID unclaimed land region becomes a seed with `province_start_score`; its
-province repeatedly claims the cheapest unclaimed land region neighboring any
-current member. Crossing from region `a` to region `b` costs:
+Province generation runs after rivers and considers land regions only. It first
+selects all province seeds with deterministic farthest-point sampling on the
+land-neighbor graph. Every disconnected land component receives a seed. The
+first seed in each component is chosen with a domain-separated hash of the world
+seed and region ID; each later seed is the region farthest from its nearest
+existing seed. Equal distances use the lower region ID.
+
+Seed distance is measured along land edges rather than directly through water.
+Crossing an edge from region `a` to region `b` contributes:
+
+```text
+distance(site[a], site[b]) / average_cell_length
+    + province_distance_contribution
+        * distance(site[a], site[b]) / world_bounds_diagonal
+    + province_elevation_contribution * abs(elevation[a] - elevation[b])
+    + province_land_type_contribution if land_type[a] != land_type[b]
+    + province_short_border_contribution
+        * clamp(1 - shared_border_length(a, b) / average_cell_length, 0, 1)
+    + province_river_contribution if their shared border carries a river
+```
+
+Seeds are added until no land region is farther than
+`province_seed_minimum_distance`. Smaller values create denser seeds; the
+default is `4.0` graph-cost units. On flat terrain without penalties, one unit
+is approximately one average cell width; terrain penalties make barriers count
+as additional distance. The generator also selects enough seeds to cover the
+theoretical capacity implied by `province_start_score`, `province_base_cost`,
+and `province_maximum_region_count`.
+
+After all seeds in a round are reserved, their provinces grow concurrently.
+Crossing from region `a` to region `b` spends:
 
 ```text
 province_base_cost
@@ -273,12 +301,13 @@ of world scale and site count. Borders at least that long add no penalty; shorte
 borders add progressively more, up to the configured contribution.
 
 The seed site is the stable center of its province, and the seed itself is free.
-At each step the generator selects the globally cheapest frontier transition;
-costs in the same absolute `EPS` bucket use region and source IDs as deterministic
-tie-breakers. Growth stops when the frontier is empty, its cheapest claim exceeds
-the remaining score, or the province reaches `province_maximum_region_count`.
-A maximum of zero disables the region-count limit. The next unclaimed land region
-then starts another province.
+The global frontier is ordered by accumulated path cost from each seed, then by
+local claim cost, target region, seed region, and source region. This produces a
+multi-source wavefront while retaining deterministic ties. Local claim costs are
+deducted from each province's `province_start_score`; unaffordable claims are
+discarded independently. A province also stops growing when it reaches
+`province_maximum_region_count`; zero disables this limit. If budget or barriers
+leave land unassigned, another farthest-point seed round is run on those regions.
 
 After growth, provinces containing fewer than
 `province_minimum_region_count` regions are removed when another province is

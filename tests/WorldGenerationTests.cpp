@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <ranges>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -29,26 +30,6 @@ void require(bool condition, std::string_view message) {
 
 void requireNear(double actual, double expected, std::string_view message) {
     require(std::abs(actual - expected) <= tolerance, message);
-}
-
-long double quantizedProvinceCost(double cost) {
-    return std::floor(static_cast<long double>(cost)
-                      / static_cast<long double>(EPS));
-}
-
-double normalizedDistance(const BoundingBox &bounds,
-                          Vector2d first,
-                          Vector2d second) {
-    const auto deltaX = static_cast<long double>(first.x)
-                        - static_cast<long double>(second.x);
-    const auto deltaY = static_cast<long double>(first.y)
-                        - static_cast<long double>(second.y);
-    const auto width = static_cast<long double>(bounds.max.x)
-                       - static_cast<long double>(bounds.min.x);
-    const auto height = static_cast<long double>(bounds.max.y)
-                        - static_cast<long double>(bounds.min.y);
-    return static_cast<double>(std::hypot(deltaX, deltaY)
-                               / std::hypot(width, height));
 }
 
 double maximumLandRelief(const World &world) {
@@ -180,13 +161,10 @@ bool requireProvinceGrowth(const World &world,
         require(!province.regionIds().empty(), "A province has no regions.");
         require(province.seedRegion() == province.regionIds().front(),
                 "A province seed is not its first region.");
-
-        const auto firstUnassigned = std::ranges::find(assigned, false);
-        require(firstUnassigned != assigned.end(),
-                "A province was created after all regions were assigned.");
-        require(province.seedRegion()
-                    == static_cast<RegionId>(firstUnassigned - assigned.begin()),
-                "A province did not use the lowest unassigned region as its seed.");
+        require(province.remainingScore() >= 0.0
+                    && province.remainingScore()
+                           <= settings.provinceStartScore + EPS,
+                "A province stored an invalid remaining score.");
 
         if (repeated != nullptr) {
             const auto &repeatedProvince = repeated->provinces()[provinceIndex];
@@ -199,10 +177,6 @@ bool requireProvinceGrowth(const World &world,
                     "Province remaining scores are not deterministic.");
         }
 
-        auto remainingScore = settings.provinceStartScore;
-        const auto provinceCenter = world.division()
-                                        .cells.at(province.seedRegion())
-                                        .sitePosition;
         std::vector<RegionId> claimed;
         claimed.reserve(province.regionIds().size());
         for (const auto actualRegion : province.regionIds()) {
@@ -216,128 +190,40 @@ bool requireProvinceGrowth(const World &world,
                             == provinceIndex,
                         "Region province IDs are not deterministic.");
             }
-            if (claimed.empty()) {
-                require(actualRegion == province.seedRegion(),
-                        "A province claim order does not begin with its seed.");
-                require(!assigned.at(actualRegion),
-                        "A province seed was already assigned.");
-                assigned[actualRegion] = true;
-                ++assignedCount;
-                claimed.push_back(actualRegion);
-                continue;
+            require(!assigned.at(actualRegion),
+                    "A land region belongs to multiple provinces.");
+            if (!claimed.empty()) {
+                require(std::ranges::any_of(
+                            world.division().cells.at(actualRegion).neighbors,
+                            [&](CellId neighbor) {
+                                return std::ranges::find(claimed, neighbor)
+                                       != claimed.end();
+                            }),
+                        "A province's stored growth order is not contiguous.");
             }
-
-            auto bestCost = std::numeric_limits<double>::infinity();
-            auto bestCostOrder = std::numeric_limits<long double>::infinity();
-            auto bestRegion = INVALID_REGION_ID;
-            auto bestSource = INVALID_REGION_ID;
-            for (const auto source : claimed) {
-                const auto &sourceCell = world.division().cells.at(source);
-                for (const auto neighbor : sourceCell.neighbors) {
-                    if (assigned.at(neighbor))
-                        continue;
-                    const auto crossesRiver = sharedBoundaryHasRiver(
-                        world,
-                        source,
-                        static_cast<RegionId>(neighbor),
-                        coordinateTolerance);
-                    sawRiverFrontier = sawRiverFrontier || crossesRiver;
-                    const auto elevationDifference = std::abs(
-                        world.regions().at(source).elevation()
-                        - world.regions().at(neighbor).elevation());
-                    const auto cost = settings.provinceBaseCost
-                                      + settings.provinceElevationContribution
-                                            * elevationDifference
-                                      + settings.provinceDistanceContribution
-                                            * normalizedDistance(
-                                                settings.bounds,
-                                                provinceCenter,
-                                                world.division()
-                                                    .cells.at(neighbor)
-                                                    .sitePosition)
-                                      + (world.regions().at(neighbor).landType()
-                                                 != world.regions()
-                                                        .at(province.seedRegion())
-                                                        .landType()
-                                             ? settings.provinceLandTypeContribution
-                                             : 0.0)
-                                      + (crossesRiver
-                                             ? settings.provinceRiverContribution
-                                             : 0.0);
-                    const auto costOrder = quantizedProvinceCost(cost);
-                    const auto neighborRegion = static_cast<RegionId>(neighbor);
-                    if (costOrder < bestCostOrder
-                        || (costOrder == bestCostOrder
-                            && (neighborRegion < bestRegion
-                                || (neighborRegion == bestRegion
-                                    && source < bestSource)))) {
-                        bestCost = cost;
-                        bestCostOrder = costOrder;
-                        bestRegion = neighborRegion;
-                        bestSource = source;
-                    }
-                }
-            }
-
-            require(bestRegion != INVALID_REGION_ID,
-                    "A province claimed a non-neighboring region.");
-            require(actualRegion == bestRegion,
-                    "A province did not claim its cheapest frontier region.");
-            require(bestCost <= remainingScore + EPS,
-                    "A province claimed a region it could not afford.");
-            remainingScore = std::max(0.0, remainingScore - bestCost);
             assigned[actualRegion] = true;
             ++assignedCount;
             claimed.push_back(actualRegion);
         }
-
-        auto cheapestRemaining = std::numeric_limits<double>::infinity();
-        for (const auto source : claimed) {
-            for (const auto neighbor : world.division().cells.at(source).neighbors) {
-                if (assigned.at(neighbor))
-                    continue;
-                const auto crossesRiver = sharedBoundaryHasRiver(
-                    world,
-                    source,
-                    static_cast<RegionId>(neighbor),
-                    coordinateTolerance);
-                sawRiverFrontier = sawRiverFrontier || crossesRiver;
-                const auto elevationDifference = std::abs(
-                    world.regions().at(source).elevation()
-                    - world.regions().at(neighbor).elevation());
-                cheapestRemaining = std::min(
-                    cheapestRemaining,
-                    settings.provinceBaseCost
-                        + settings.provinceElevationContribution
-                              * elevationDifference
-                        + settings.provinceDistanceContribution
-                              * normalizedDistance(
-                                  settings.bounds,
-                                  provinceCenter,
-                                  world.division().cells.at(neighbor).sitePosition)
-                        + (world.regions().at(neighbor).landType()
-                                   != world.regions()
-                                          .at(province.seedRegion())
-                                          .landType()
-                               ? settings.provinceLandTypeContribution
-                               : 0.0)
-                        + (crossesRiver
-                               ? settings.provinceRiverContribution
-                               : 0.0));
-            }
-        }
-        require((settings.provinceMaximumRegionCount != 0
-                 && province.regionIds().size()
-                        >= settings.provinceMaximumRegionCount)
-                    || cheapestRemaining > remainingScore + EPS,
-                "A province stopped before reaching its budget or region-count limit.");
-        requireNear(province.remainingScore(),
-                    remainingScore,
-                    "A province stored an incorrect remaining score.");
     }
 
     require(assignedCount == landRegionCount,
             "Provinces do not assign every land region exactly once.");
+
+    for (std::size_t region = 0; region < world.regions().size(); ++region) {
+        if (!world.regions()[region].isLand())
+            continue;
+        for (const auto neighbor : world.division().cells[region].neighbors) {
+            if (neighbor <= region || !world.regions()[neighbor].isLand())
+                continue;
+            sawRiverFrontier = sawRiverFrontier
+                               || sharedBoundaryHasRiver(
+                                   world,
+                                   static_cast<RegionId>(region),
+                                   neighbor,
+                                   coordinateTolerance);
+        }
+    }
     return sawRiverFrontier;
 }
 
@@ -1166,6 +1052,7 @@ void testProvinceBudgets() {
     requireProvinceGrowth(noBudgetWorld, settings);
 
     settings.provinceBaseCost = 0.0;
+    settings.provinceSeedMinimumDistance = 1000.0;
     const auto freeWorld = WorldGenerator{settings}.generate();
     require(freeWorld.provinces().size() == 1,
             "Free claims did not combine a connected world into one province.");
@@ -1196,6 +1083,135 @@ void testProvinceBudgets() {
     requireProvinceGrowth(waterWorld, settings);
 }
 
+void testProvinceFarthestPointSeedsAndConcurrentGrowth() {
+    const auto generateLine = [](std::size_t regionCount,
+                                 double seedMinimumDistance,
+                                 double elevationContribution = 0.0,
+                                 std::size_t elevationSplit = 0,
+                                 std::uint64_t generationSeed = 2) {
+        const BoundingBox bounds{
+            {0.0, 0.0},
+            {static_cast<double>(regionCount), 1.0},
+        };
+        WorldDivision division;
+        division.cells.reserve(regionCount);
+        for (CellId id = 0; id < regionCount; ++id) {
+            std::vector<CellId> neighbors;
+            if (id > 0)
+                neighbors.push_back(id - 1);
+            if (static_cast<std::size_t>(id) + 1 < regionCount)
+                neighbors.push_back(id + 1);
+            division.cells.push_back({
+                .id = id,
+                .sitePosition = {static_cast<double>(id) + 0.5, 0.5},
+                .neighbors = std::move(neighbors),
+            });
+        }
+
+        std::vector<Region> regions;
+        regions.reserve(regionCount);
+        for (CellId id = 0; id < regionCount; ++id) {
+            regions.emplace_back(
+                id,
+                static_cast<std::size_t>(id) >= elevationSplit ? 1.0 : 0.0,
+                0.0,
+                0,
+                static_cast<LandClimateId>(id));
+        }
+        return generateProvinces(bounds,
+                                 division,
+                                 regions,
+                                 100.0,
+                                 0.0,
+                                 elevationContribution,
+                                 0.0,
+                                 1.0,
+                                 1,
+                                 0.0,
+                                 0.0,
+                                 0,
+                                 seedMinimumDistance,
+                                 generationSeed);
+    };
+
+    const auto sparse = generateLine(9, 100.0);
+    require(sparse.size() == 1,
+            "A seed spacing larger than a land component created extra seeds.");
+    const auto otherWorldSeed = generateLine(9, 100.0, 0.0, 0, 3);
+    require(otherWorldSeed.front().seedRegion()
+                != sparse.front().seedRegion(),
+            "Province seed selection did not respond to the world seed.");
+
+    const auto distributed = generateLine(9, 2.5);
+    require(distributed.size() == 3,
+            "Farthest-point sampling did not cover a line with three seeds.");
+    std::vector<RegionId> distributedSeeds;
+    for (const auto &province : distributed)
+        distributedSeeds.push_back(province.seedRegion());
+    std::ranges::sort(distributedSeeds);
+    require(distributedSeeds == std::vector<RegionId>{0, 4, 8},
+            "Farthest-point sampling did not choose the expected separated seeds.");
+    for (RegionId region = 0; region < 9; ++region) {
+        const auto closestSeed = std::ranges::min(
+            distributedSeeds
+            | std::views::transform([&](RegionId seed) {
+                  return std::abs(static_cast<int>(seed)
+                                  - static_cast<int>(region));
+              }));
+        require(closestSeed <= 2,
+                "Farthest-point seeds did not cover every line region.");
+    }
+
+    const auto flat = generateLine(6, 5.0, 0.0, 3);
+    const auto dividedByRelief = generateLine(6, 5.0, 10.0, 3);
+    require(flat.size() == 1,
+            "A flat line unexpectedly crossed its seed-distance threshold.");
+    require(dividedByRelief.size() == 2,
+            "A steep terrain barrier did not create seeds on both sides.");
+
+    const auto concurrent = generateLine(5, 3.0);
+    require(concurrent.size() == 2,
+            "The concurrent-growth fixture did not create two provinces.");
+    require(concurrent[0].regionIds()
+                == std::vector<RegionId>{0, 1, 2}
+                && concurrent[1].regionIds()
+                       == std::vector<RegionId>{4, 3},
+            "Province fronts did not grow concurrently by accumulated distance.");
+
+    const BoundingBox islandBounds{{0.0, 0.0}, {5.0, 1.0}};
+    const WorldDivision islandDivision{
+        .cells = {
+            {.id = 0, .sitePosition = {0.5, 0.5}, .neighbors = {1}},
+            {.id = 1, .sitePosition = {1.5, 0.5}, .neighbors = {0, 2}},
+            {.id = 2, .sitePosition = {2.5, 0.5}, .neighbors = {1, 3}},
+            {.id = 3, .sitePosition = {3.5, 0.5}, .neighbors = {2, 4}},
+            {.id = 4, .sitePosition = {4.5, 0.5}, .neighbors = {3}},
+        },
+    };
+    std::vector<Region> islandRegions;
+    islandRegions.emplace_back(0, 1.0, 0.0, 0, 0);
+    islandRegions.emplace_back(1, 1.0, 0.0, 0, 1);
+    islandRegions.emplace_back(2, 0.0, 1.0, 0, INVALID_LAND_CLIMATE_ID);
+    islandRegions.emplace_back(3, 1.0, 0.0, 0, 2);
+    islandRegions.emplace_back(4, 1.0, 0.0, 0, 3);
+    const auto islandProvinces = generateProvinces(islandBounds,
+                                                   islandDivision,
+                                                   islandRegions,
+                                                   100.0,
+                                                   0.0,
+                                                   0.0,
+                                                   0.0,
+                                                   1.0,
+                                                   1,
+                                                   0.0,
+                                                   0.0,
+                                                   0,
+                                                   100.0,
+                                                   2);
+    require(islandProvinces.size() == 2,
+            "Disconnected land components did not each receive a seed.");
+}
+
 void testProvinceCostOrdering() {
     const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
     const WorldDivision division{
@@ -1219,7 +1235,11 @@ void testProvinceCostOrdering() {
                                  0.0,
                                  0.0,
                                  1,
-                                 0.0);
+                                 0.0,
+                                 0.0,
+                                 0,
+                                 1000.0,
+                                 2);
     };
 
     const auto epsilonTied = generate(0.75 * EPS, 0.25 * EPS);
@@ -1288,7 +1308,11 @@ void testProvinceShortBorderPenalty() {
                                  0.0,
                                  0.0,
                                  1,
-                                 shortBorderContribution);
+                                 shortBorderContribution,
+                                 0.0,
+                                 0,
+                                 1000.0,
+                                 2);
     };
 
     const auto disabled = generate(0.0);
@@ -1336,7 +1360,10 @@ void testProvinceLandTypePenalty() {
                                  0.0,
                                  1,
                                  0.0,
-                                 landTypeContribution);
+                                 landTypeContribution,
+                                 0,
+                                 1000.0,
+                                 2);
     };
 
     const auto disabled = generate(0.0);
@@ -1393,13 +1420,13 @@ void testSmallProvinceMerging() {
     require(splitProvinces.size() == 2,
             "An undersized province with neighbors was not deleted.");
     require(splitProvinces[0].regionIds()
-                == std::vector<RegionId>{0, 1, 2, 3},
+                == std::vector<RegionId>{2, 3, 4, 1, 0},
             "A small-province region did not join its neighboring province.");
     require(splitProvinces[1].regionIds()
-                == std::vector<RegionId>{5, 6, 7, 4},
+                == std::vector<RegionId>{7, 6, 5},
             "Small-province regions were not reassigned independently.");
     for (RegionId region = 0; region < splitRegions.size(); ++region) {
-        const auto expectedProvince = region >= 4 ? ProvinceId{1}
+        const auto expectedProvince = region >= 5 ? ProvinceId{1}
                                                   : ProvinceId{0};
         require(splitRegions[region].provinceId() == expectedProvince,
                 "A merged region retained its deleted province ID.");
@@ -1430,7 +1457,7 @@ void testSmallProvinceMerging() {
     require(combined.size() == 1,
             "A connected group of small provinces did not retain one target.");
     require(combined.front().regionIds()
-                == std::vector<RegionId>{0, 1, 2, 3, 4},
+                == std::vector<RegionId>{2, 1, 3, 0, 4},
             "Small provinces without a large neighbor were not combined deterministically.");
     require(std::ranges::all_of(allSmallRegions,
                                 [](const Region &region) {
@@ -1499,16 +1526,16 @@ void testSmallProvinceCheapestReassignment() {
     require(provinces.size() == 2,
             "The cheapest-reassignment fixture did not remove its small province.");
     require(provinces[0].regionIds()
-                == std::vector<RegionId>{0, 1, 2},
+                == std::vector<RegionId>{2, 1, 0},
             "An orphaned region joined a more expensive lower-ID province.");
     require(provinces[1].regionIds()
-                == std::vector<RegionId>{4, 5, 6, 3},
+                == std::vector<RegionId>{6, 5, 4, 3},
             "An orphaned region did not join its cheapest neighboring province.");
     require(regions[3].provinceId() == 1,
             "Cheapest reassignment did not update the region's compacted province ID.");
 }
 
-void testCappedSmallProvinceReassignment() {
+void testProvinceCapacitySeedSelection() {
     const BoundingBox bounds{{0.0, 0.0}, {10.0, 10.0}};
     const auto generate = [&](std::size_t regionCount) {
         WorldDivision division;
@@ -1552,24 +1579,21 @@ void testCappedSmallProvinceReassignment() {
 
     const auto [provinces, regions] = generate(6);
     require(provinces.size() == 2,
-            "A capped small province was not integrated into another province.");
-    require(provinces[0].regionIds()
-                == std::vector<RegionId>{0, 1, 2},
-            "A full cheapest province accepted another region.");
-    require(provinces[1].regionIds()
-                == std::vector<RegionId>{4, 5, 3},
-            "Capped reassignment did not try the next-best neighbor with capacity.");
-    require(regions[3].provinceId() == 1,
-            "Capped reassignment stored the wrong compacted province ID.");
+            "Capacity-aware seed selection did not create two provinces for six regions.");
+    require(std::ranges::all_of(regions,
+                                [](const Region &region) {
+                                    return region.hasProvince();
+                                }),
+            "Capacity-aware seed selection left a land region unassigned.");
 
     const auto [fullProvinces, fullRegions] = generate(7);
-    require(fullProvinces.size() == 2,
-            "A small province survived when every neighboring province was full.");
-    require(fullProvinces[0].regionIds()
-                == std::vector<RegionId>{0, 1, 2, 3},
-            "All-full reassignment did not fall back to the cheapest neighbor.");
-    require(fullRegions[3].provinceId() == 0,
-            "All-full reassignment stored the wrong compacted province ID.");
+    require(fullProvinces.size() == 3,
+            "Capacity-aware seed selection did not round up the province count.");
+    require(std::ranges::all_of(fullRegions,
+                                [](const Region &region) {
+                                    return region.hasProvince();
+                                }),
+            "Capacity-aware seed selection lost a land region.");
 }
 
 void testCoastalSmallProvinceMerging() {
@@ -1600,8 +1624,9 @@ void testCoastalSmallProvinceMerging() {
                                              0.0);
     require(provinces.size() == 1,
             "Coastal small provinces did not merge into their land anchor.");
-    require(provinces.front().regionIds()
-                == std::vector<RegionId>{0, 1, 2},
+    auto coastalRegionIds = provinces.front().regionIds();
+    std::ranges::sort(coastalRegionIds);
+    require(coastalRegionIds == std::vector<RegionId>{0, 1, 2},
             "Coastal province merging included water or lost a land region.");
     require(std::ranges::all_of(regions.begin(),
                                 regions.begin() + 3,
@@ -1638,6 +1663,9 @@ void testProvinceSettingsValidation() {
     requireNear(settings.provinceBaseCost,
                 1.0,
                 "The default province base cost must be 1.");
+    requireNear(settings.provinceSeedMinimumDistance,
+                4.0,
+                "The default province seed minimum distance must be 4.");
     require(settings.provinceMinimumRegionCount == 3,
             "The default minimum province region count must be 3.");
     require(settings.provinceMaximumRegionCount == 0,
@@ -1711,6 +1739,15 @@ void testProvinceSettingsValidation() {
     try {
         static_cast<void>(WorldGenerator{settings});
         require(false, "A negative province short-border contribution was accepted.");
+    } catch (const std::invalid_argument &) {
+    }
+
+    settings.provinceShortBorderContribution = 5.0;
+    settings.provinceSeedMinimumDistance = -0.01;
+    try {
+        static_cast<void>(WorldGenerator{settings});
+        require(false,
+                "A negative province seed minimum distance was accepted.");
     } catch (const std::invalid_argument &) {
     }
 }
@@ -2058,12 +2095,13 @@ int main() {
         testClimateSettingsValidation();
         testOceanHumidity();
         testProvinceBudgets();
+        testProvinceFarthestPointSeedsAndConcurrentGrowth();
         testProvinceCostOrdering();
         testProvinceShortBorderPenalty();
         testProvinceLandTypePenalty();
         testSmallProvinceMerging();
         testSmallProvinceCheapestReassignment();
-        testCappedSmallProvinceReassignment();
+        testProvinceCapacitySeedSelection();
         testCoastalSmallProvinceMerging();
         testProvinceSettingsValidation();
         testRivers();

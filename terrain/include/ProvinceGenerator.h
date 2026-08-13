@@ -5,6 +5,7 @@
 #include "WorldDivision.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -22,6 +23,8 @@ namespace worldgen {
     std::size_t minimumRegionCount = 3,
     double shortBorderContribution = 0.0,
     double landTypeContribution = 0.0,
-    std::size_t maximumRegionCount = 0);
+    std::size_t maximumRegionCount = 0,
+    double seedMinimumDistance = 4.0,
+    std::uint64_t generationSeed = 0);
 
 } // namespace worldgen

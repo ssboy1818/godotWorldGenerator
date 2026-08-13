@@ -48,6 +48,7 @@ func _initialize() -> void:
     assert(is_equal_approx(settings.province_land_type_contribution, 5.0))
     assert(is_equal_approx(settings.province_short_border_contribution, 5.0))
     assert(is_equal_approx(settings.province_base_cost, 1.0))
+    assert(is_equal_approx(settings.province_seed_minimum_distance, 4.0))
     assert(settings.province_minimum_region_count == 3)
     assert(settings.province_maximum_region_count == 0)
     assert(is_equal_approx(settings.equator_temperature, 30.0))
@@ -113,6 +114,7 @@ func _initialize() -> void:
     settings.province_land_type_contribution = 5.0
     settings.province_short_border_contribution = 5.0
     settings.province_base_cost = 1.0
+    settings.province_seed_minimum_distance = 4.0
     settings.province_minimum_region_count = 3
     settings.province_maximum_region_count = 12
 

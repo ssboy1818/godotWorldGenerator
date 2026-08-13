@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <queue>
 #include <stdexcept>
@@ -17,7 +18,10 @@ namespace worldgen {
 namespace {
 
 struct Claim {
+    double distanceFromSeed;
     double cost;
+    ProvinceId province;
+    RegionId provinceSeed;
     RegionId region;
     RegionId fromRegion;
 };
@@ -43,12 +47,18 @@ struct ClaimCostParameters {
 struct MoreExpensiveClaim {
     [[nodiscard]] bool operator()(const Claim &left,
                                   const Claim &right) const noexcept {
+        const auto leftDistance = quantizedCost(left.distanceFromSeed);
+        const auto rightDistance = quantizedCost(right.distanceFromSeed);
+        if (leftDistance != rightDistance)
+            return leftDistance > rightDistance;
         const auto leftCost = quantizedCost(left.cost);
         const auto rightCost = quantizedCost(right.cost);
         if (leftCost != rightCost)
             return leftCost > rightCost;
         if (left.region != right.region)
             return left.region > right.region;
+        if (left.provinceSeed != right.provinceSeed)
+            return left.provinceSeed > right.provinceSeed;
         return left.fromRegion > right.fromRegion;
     }
 };
@@ -285,6 +295,337 @@ struct MoreExpensiveClaim {
         }
     }
     return indexed;
+}
+
+struct WeightedNeighbor {
+    RegionId region;
+    double distance;
+};
+
+struct LandGraph {
+    std::vector<std::vector<RegionId>> neighbors;
+    std::vector<std::vector<WeightedNeighbor>> weightedNeighbors;
+};
+
+[[nodiscard]] double seedTraversalDistance(
+    const BoundingBox &boundingBox,
+    const WorldDivision &division,
+    const std::vector<Region *> &regions,
+    const ClaimCostParameters &parameters,
+    RegionId first,
+    RegionId second) {
+    const auto firstIndex = static_cast<std::size_t>(first);
+    const auto secondIndex = static_cast<std::size_t>(second);
+    const auto &firstCell = division.cells[firstIndex];
+    const auto &secondCell = division.cells[secondIndex];
+    const auto &firstRegion = *regions[firstIndex];
+    const auto &secondRegion = *regions[secondIndex];
+
+    const auto siteDistance = (firstCell.sitePosition
+                               - secondCell.sitePosition).length()
+                              / parameters.averageCellLength;
+    const auto worldDistance = normalizedDistance(boundingBox,
+                                                  firstCell.sitePosition,
+                                                  secondCell.sitePosition);
+    const auto elevationPenalty = parameters.elevationContribution
+                                  * std::abs(firstRegion.elevation()
+                                             - secondRegion.elevation());
+    const auto riverPenalty = sharedBoundaryHasRiver(
+                                  firstCell,
+                                  firstRegion,
+                                  secondCell,
+                                  secondRegion,
+                                  parameters.sharedEdgeTolerance)
+                                  ? parameters.riverContribution
+                                  : 0.0;
+
+    auto shortBorderPenalty = 0.0;
+    if (parameters.shortBorderContribution > 0.0) {
+        const auto borderLength = sharedBoundaryLength(
+            firstCell,
+            secondCell,
+            parameters.sharedEdgeTolerance);
+        if (!std::isfinite(borderLength)
+            || borderLength <= parameters.sharedEdgeTolerance) {
+            throw std::logic_error(
+                "Neighboring regions do not share a measurable border.");
+        }
+        shortBorderPenalty = parameters.shortBorderContribution
+                             * std::clamp(
+                                 1.0
+                                     - borderLength
+                                           / parameters.averageCellLength,
+                                 0.0,
+                                 1.0);
+    }
+
+    auto landTypePenalty = 0.0;
+    if (parameters.landTypeContribution > 0.0) {
+        if (!firstRegion.hasLandType() || !secondRegion.hasLandType()) {
+            throw std::logic_error(
+                "Province land-type distances require classified land regions.");
+        }
+        if (firstRegion.landType() != secondRegion.landType())
+            landTypePenalty = parameters.landTypeContribution;
+    }
+
+    const auto distance = siteDistance
+                          + parameters.distanceContribution * worldDistance
+                          + elevationPenalty
+                          + riverPenalty
+                          + shortBorderPenalty
+                          + landTypePenalty;
+    if (!std::isfinite(distance) || distance < 0.0) {
+        throw std::logic_error(
+            "Province generation produced an invalid seed distance.");
+    }
+    return distance;
+}
+
+[[nodiscard]] LandGraph buildLandGraph(
+    const BoundingBox &boundingBox,
+    const WorldDivision &division,
+    const std::vector<Region *> &regions,
+    const ClaimCostParameters &parameters) {
+    LandGraph graph{
+        .neighbors = std::vector<std::vector<RegionId>>(regions.size()),
+        .weightedNeighbors =
+            std::vector<std::vector<WeightedNeighbor>>(regions.size()),
+    };
+
+    for (std::size_t region = 0; region < division.cells.size(); ++region) {
+        for (const auto neighbor : division.cells[region].neighbors) {
+            const auto neighborIndex = static_cast<std::size_t>(neighbor);
+            if (neighborIndex >= regions.size()) {
+                throw std::logic_error(
+                    "Province generation received an invalid cell neighbor.");
+            }
+            if (neighborIndex == region
+                || regions[region]->isWater()
+                || regions[neighborIndex]->isWater()) {
+                continue;
+            }
+            graph.neighbors[region].push_back(neighbor);
+            graph.neighbors[neighborIndex].push_back(
+                static_cast<RegionId>(region));
+        }
+    }
+
+    for (auto &neighbors : graph.neighbors) {
+        std::ranges::sort(neighbors);
+        const auto afterUnique = std::ranges::unique(neighbors).begin();
+        neighbors.erase(afterUnique, neighbors.end());
+    }
+    for (std::size_t region = 0; region < graph.neighbors.size(); ++region) {
+        for (const auto neighbor : graph.neighbors[region]) {
+            if (region >= static_cast<std::size_t>(neighbor))
+                continue;
+            const auto distance = seedTraversalDistance(
+                boundingBox,
+                division,
+                regions,
+                parameters,
+                static_cast<RegionId>(region),
+                neighbor);
+            graph.weightedNeighbors[region].push_back({neighbor, distance});
+            graph.weightedNeighbors[neighbor].push_back(
+                {static_cast<RegionId>(region), distance});
+        }
+    }
+    return graph;
+}
+
+[[nodiscard]] std::uint64_t mixSeed(std::uint64_t value) noexcept {
+    value += 0x9e3779b97f4a7c15ULL;
+    value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+    value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
+    return value ^ (value >> 31U);
+}
+
+struct DistanceEntry {
+    double distance;
+    RegionId region;
+};
+
+struct MoreDistantEntry {
+    [[nodiscard]] bool operator()(const DistanceEntry &left,
+                                  const DistanceEntry &right) const noexcept {
+        const auto leftDistance = quantizedCost(left.distance);
+        const auto rightDistance = quantizedCost(right.distance);
+        if (leftDistance != rightDistance)
+            return leftDistance > rightDistance;
+        return left.region > right.region;
+    }
+};
+
+void updateNearestSeedDistances(
+    const LandGraph &graph,
+    const std::vector<bool> &eligible,
+    RegionId seed,
+    std::vector<double> &nearestDistances) {
+    std::priority_queue<DistanceEntry,
+                        std::vector<DistanceEntry>,
+                        MoreDistantEntry> frontier;
+    nearestDistances[seed] = 0.0;
+    frontier.push({0.0, seed});
+
+    while (!frontier.empty()) {
+        const auto current = frontier.top();
+        frontier.pop();
+        if (current.distance > nearestDistances[current.region] + EPS)
+            continue;
+
+        for (const auto &edge : graph.weightedNeighbors[current.region]) {
+            if (!eligible[edge.region])
+                continue;
+            const auto candidateDistance = current.distance + edge.distance;
+            if (candidateDistance + EPS >= nearestDistances[edge.region])
+                continue;
+            nearestDistances[edge.region] = candidateDistance;
+            frontier.push({candidateDistance, edge.region});
+        }
+    }
+}
+
+[[nodiscard]] std::size_t maximumProvinceCapacity(
+    double startScore,
+    double baseCost,
+    std::size_t maximumRegionCount) noexcept {
+    auto capacity = maximumRegionCount == 0
+                        ? std::numeric_limits<std::size_t>::max()
+                        : maximumRegionCount;
+    if (baseCost <= 0.0)
+        return capacity;
+
+    const auto affordableClaims = std::floor(
+        (static_cast<long double>(startScore)
+         + static_cast<long double>(EPS))
+        / static_cast<long double>(baseCost));
+    const auto maximumSize = static_cast<long double>(
+        std::numeric_limits<std::size_t>::max());
+    const auto budgetCapacity = affordableClaims >= maximumSize - 1.0L
+                                    ? std::numeric_limits<std::size_t>::max()
+                                    : static_cast<std::size_t>(affordableClaims)
+                                          + 1;
+    return std::min(capacity, budgetCapacity);
+}
+
+[[nodiscard]] std::vector<RegionId> selectProvinceSeeds(
+    const LandGraph &graph,
+    const std::vector<bool> &eligible,
+    double minimumDistance,
+    std::size_t provinceCapacity,
+    std::uint64_t generationSeed) {
+    std::vector<std::vector<RegionId>> components;
+    std::vector<std::size_t> componentIds(
+        eligible.size(),
+        std::numeric_limits<std::size_t>::max());
+    for (std::size_t first = 0; first < eligible.size(); ++first) {
+        if (!eligible[first]
+            || componentIds[first] != std::numeric_limits<std::size_t>::max()) {
+            continue;
+        }
+
+        const auto componentId = components.size();
+        components.emplace_back();
+        std::vector<RegionId> pending{static_cast<RegionId>(first)};
+        componentIds[first] = componentId;
+        while (!pending.empty()) {
+            const auto region = pending.back();
+            pending.pop_back();
+            components.back().push_back(region);
+            for (const auto neighbor : graph.neighbors[region]) {
+                if (!eligible[neighbor]
+                    || componentIds[neighbor]
+                           != std::numeric_limits<std::size_t>::max()) {
+                    continue;
+                }
+                componentIds[neighbor] = componentId;
+                pending.push_back(neighbor);
+            }
+        }
+        std::ranges::sort(components.back());
+    }
+
+    if (components.empty())
+        return {};
+
+    std::vector<std::size_t> requiredSeedCounts(components.size(), 1);
+    if (provinceCapacity != std::numeric_limits<std::size_t>::max()) {
+        for (std::size_t component = 0;
+             component < components.size();
+             ++component) {
+            requiredSeedCounts[component] =
+                1 + (components[component].size() - 1)
+                        / provinceCapacity;
+        }
+    }
+
+    std::vector<bool> selected(eligible.size(), false);
+    std::vector<double> nearestDistances(
+        eligible.size(),
+        std::numeric_limits<double>::infinity());
+    std::vector<std::size_t> componentSeedCounts(components.size(), 0);
+    std::vector<RegionId> seeds;
+    const auto addSeed = [&](RegionId seed) {
+        selected[seed] = true;
+        ++componentSeedCounts[componentIds[seed]];
+        seeds.push_back(seed);
+        updateNearestSeedDistances(graph,
+                                   eligible,
+                                   seed,
+                                   nearestDistances);
+    };
+
+    constexpr auto domain = 0x70726f76696e6365ULL;
+    for (const auto &component : components) {
+        auto firstSeed = component.front();
+        auto firstRank = mixSeed(generationSeed
+                                 ^ domain
+                                 ^ static_cast<std::uint64_t>(firstSeed));
+        for (const auto region : component) {
+            const auto rank = mixSeed(generationSeed
+                                      ^ domain
+                                      ^ static_cast<std::uint64_t>(region));
+            if (rank < firstRank
+                || (rank == firstRank && region < firstSeed)) {
+                firstSeed = region;
+                firstRank = rank;
+            }
+        }
+        addSeed(firstSeed);
+    }
+
+    while (true) {
+        auto candidate = INVALID_REGION_ID;
+        auto candidateDistanceOrder =
+            -std::numeric_limits<long double>::infinity();
+        for (std::size_t region = 0; region < eligible.size(); ++region) {
+            if (!eligible[region] || selected[region])
+                continue;
+            const auto component = componentIds[region];
+            const auto needsCapacity = componentSeedCounts[component]
+                                       < requiredSeedCounts[component];
+            const auto distanceOrder = quantizedCost(nearestDistances[region]);
+            const auto isFarEnough = nearestDistances[region]
+                                     > minimumDistance + EPS;
+            if (!needsCapacity && !isFarEnough)
+                continue;
+            const auto regionId = static_cast<RegionId>(region);
+            if (candidate == INVALID_REGION_ID
+                || distanceOrder > candidateDistanceOrder
+                || (distanceOrder == candidateDistanceOrder
+                    && regionId < candidate)) {
+                candidate = regionId;
+                candidateDistanceOrder = distanceOrder;
+            }
+        }
+        if (candidate == INVALID_REGION_ID)
+            break;
+        addSeed(candidate);
+    }
+
+    return seeds;
 }
 
 [[nodiscard]] std::vector<Province> mergeSmallProvinces(
@@ -595,7 +936,9 @@ std::vector<Province> generateProvinces(
     std::size_t minimumRegionCount,
     double shortBorderContribution,
     double landTypeContribution,
-    std::size_t maximumRegionCount) {
+    std::size_t maximumRegionCount,
+    double seedMinimumDistance,
+    std::uint64_t generationSeed) {
     if (!std::isfinite(startScore) || startScore < 0.0
         || !std::isfinite(riverContribution) || riverContribution < 0.0
         || !std::isfinite(elevationContribution)
@@ -606,9 +949,11 @@ std::vector<Province> generateProvinces(
         || !std::isfinite(shortBorderContribution)
         || shortBorderContribution < 0.0
         || !std::isfinite(landTypeContribution)
-        || landTypeContribution < 0.0) {
+        || landTypeContribution < 0.0
+        || !std::isfinite(seedMinimumDistance)
+        || seedMinimumDistance < 0.0) {
         throw std::invalid_argument(
-            "Province scores, costs, and contributions must be finite and non-negative.");
+            "Province scores, costs, contributions, and seed distance must be finite and non-negative.");
     }
     if (!std::isfinite(baseCost
                        + riverContribution
@@ -642,19 +987,16 @@ std::vector<Province> generateProvinces(
     }
     const auto sharedEdgeTolerance = numericalToleranceFor(boundingBox)
                                          .sharedEdgeLength();
-    auto averageCellLength = 0.0;
-    if (shortBorderContribution > 0.0) {
-        const auto width = static_cast<long double>(boundingBox.max.x)
-                           - static_cast<long double>(boundingBox.min.x);
-        const auto height = static_cast<long double>(boundingBox.max.y)
-                            - static_cast<long double>(boundingBox.min.y);
-        averageCellLength = static_cast<double>(std::sqrt(
-            width * height
-            / static_cast<long double>(division.cells.size())));
-        if (!std::isfinite(averageCellLength) || averageCellLength <= 0.0) {
-            throw std::logic_error(
-                "Province generation could not determine an average cell length.");
-        }
+    const auto width = static_cast<long double>(boundingBox.max.x)
+                       - static_cast<long double>(boundingBox.min.x);
+    const auto height = static_cast<long double>(boundingBox.max.y)
+                        - static_cast<long double>(boundingBox.min.y);
+    const auto averageCellLength = static_cast<double>(std::sqrt(
+        width * height
+        / static_cast<long double>(division.cells.size())));
+    if (!std::isfinite(averageCellLength) || averageCellLength <= 0.0) {
+        throw std::logic_error(
+            "Province generation could not determine an average cell length.");
     }
     const ClaimCostParameters costParameters{
         .riverContribution = riverContribution,
@@ -666,78 +1008,153 @@ std::vector<Province> generateProvinces(
         .sharedEdgeTolerance = sharedEdgeTolerance,
         .averageCellLength = averageCellLength,
     };
+    const auto landGraph = buildLandGraph(boundingBox,
+                                          division,
+                                          indexedRegions,
+                                          costParameters);
+    const auto provinceCapacity = maximumProvinceCapacity(startScore,
+                                                          baseCost,
+                                                          maximumRegionCount);
     std::vector<bool> assigned(regions.size(), false);
-    for (std::size_t region = 0; region < indexedRegions.size(); ++region)
+    std::vector<bool> eligible(regions.size(), false);
+    auto unassignedLandCount = std::size_t{0};
+    for (std::size_t region = 0; region < indexedRegions.size(); ++region) {
         assigned[region] = indexedRegions[region]->isWater();
-    std::vector<Province> provinces;
-    provinces.reserve(regions.size());
+        eligible[region] = !assigned[region];
+        if (eligible[region])
+            ++unassignedLandCount;
+    }
 
-    for (std::size_t seedIndex = 0;
-         seedIndex < indexedRegions.size();
-         ++seedIndex) {
-        if (assigned[seedIndex])
-            continue;
+    std::vector<RegionId> provinceSeeds;
+    std::vector<std::vector<RegionId>> provinceRegions;
+    std::vector<double> remainingScores;
+    std::vector<double> growthDistances(
+        regions.size(),
+        std::numeric_limits<double>::infinity());
+    provinceSeeds.reserve(regions.size());
+    provinceRegions.reserve(regions.size());
+    remainingScores.reserve(regions.size());
 
-        const auto seed = static_cast<RegionId>(seedIndex);
-        const auto provinceId = static_cast<ProvinceId>(provinces.size());
-        auto remainingScore = startScore;
-        std::vector<RegionId> provinceRegions{seed};
-        assigned[seedIndex] = true;
-        indexedRegions[seedIndex]->setProvinceId(provinceId);
-
-        std::priority_queue<Claim,
-                            std::vector<Claim>,
-                            MoreExpensiveClaim> frontier;
-        const auto addFrontier = [&](RegionId fromRegion) {
-            const auto fromIndex = static_cast<std::size_t>(fromRegion);
-            const auto &fromCell = division.cells[fromIndex];
-            for (const auto neighborCell : fromCell.neighbors) {
-                const auto neighborIndex = static_cast<std::size_t>(neighborCell);
-                if (neighborIndex >= indexedRegions.size()) {
-                    throw std::logic_error(
-                        "Province generation received an invalid cell neighbor.");
-                }
-                if (assigned[neighborIndex])
-                    continue;
-
-                const auto cost = provinceClaimCost(
-                    boundingBox,
-                    division,
-                    indexedRegions,
-                    costParameters,
-                    seed,
-                    fromRegion,
-                    static_cast<RegionId>(neighborIndex));
-                frontier.push({cost,
-                               static_cast<RegionId>(neighborIndex),
-                               fromRegion});
+    using ClaimQueue = std::priority_queue<Claim,
+                                           std::vector<Claim>,
+                                           MoreExpensiveClaim>;
+    const auto addFrontier = [&](ProvinceId province,
+                                 RegionId fromRegion,
+                                 ClaimQueue &frontier) {
+        const auto seed = provinceSeeds[province];
+        for (const auto neighbor : landGraph.neighbors[fromRegion]) {
+            if (assigned[neighbor])
+                continue;
+            const auto cost = provinceClaimCost(
+                boundingBox,
+                division,
+                indexedRegions,
+                costParameters,
+                seed,
+                fromRegion,
+                neighbor);
+            const auto distanceFromSeed = growthDistances[fromRegion] + cost;
+            if (!std::isfinite(distanceFromSeed)) {
+                throw std::logic_error(
+                    "Province generation produced an invalid growth distance.");
             }
-        };
-
-        addFrontier(seed);
+            frontier.push({distanceFromSeed,
+                           cost,
+                           province,
+                           seed,
+                           neighbor,
+                           fromRegion});
+        }
+    };
+    const auto addSeedBatch = [&](const std::vector<RegionId> &seeds,
+                                  ClaimQueue &frontier) {
+        const auto firstProvince = provinceSeeds.size();
+        for (const auto seed : seeds) {
+            if (assigned[seed]) {
+                throw std::logic_error(
+                    "Province generation selected an assigned seed region.");
+            }
+            if (provinceSeeds.size() >= INVALID_PROVINCE_ID) {
+                throw std::logic_error(
+                    "Province generation exceeded the province ID range.");
+            }
+            const auto province = static_cast<ProvinceId>(
+                provinceSeeds.size());
+            provinceSeeds.push_back(seed);
+            provinceRegions.push_back({seed});
+            remainingScores.push_back(startScore);
+            assigned[seed] = true;
+            eligible[seed] = false;
+            growthDistances[seed] = 0.0;
+            --unassignedLandCount;
+            indexedRegions[seed]->setProvinceId(province);
+        }
+        for (auto province = firstProvince;
+             province < provinceSeeds.size();
+             ++province) {
+            addFrontier(static_cast<ProvinceId>(province),
+                        provinceSeeds[province],
+                        frontier);
+        }
+    };
+    const auto growSeedBatch = [&](ClaimQueue &frontier) {
         while (!frontier.empty()) {
-            if (maximumRegionCount != 0
-                && provinceRegions.size() >= maximumRegionCount) {
-                break;
-            }
             const auto claim = frontier.top();
             frontier.pop();
-            const auto claimIndex = static_cast<std::size_t>(claim.region);
-            if (assigned[claimIndex])
+            if (assigned[claim.region])
                 continue;
-            if (claim.cost > remainingScore + EPS)
-                break;
+            if (maximumRegionCount != 0
+                && provinceRegions[claim.province].size()
+                       >= maximumRegionCount) {
+                continue;
+            }
+            if (claim.cost > remainingScores[claim.province] + EPS)
+                continue;
 
-            remainingScore = std::max(0.0, remainingScore - claim.cost);
-            assigned[claimIndex] = true;
-            indexedRegions[claimIndex]->setProvinceId(provinceId);
-            provinceRegions.push_back(claim.region);
-            addFrontier(claim.region);
+            remainingScores[claim.province] = std::max(
+                0.0,
+                remainingScores[claim.province] - claim.cost);
+            assigned[claim.region] = true;
+            eligible[claim.region] = false;
+            growthDistances[claim.region] = claim.distanceFromSeed;
+            --unassignedLandCount;
+            indexedRegions[claim.region]->setProvinceId(claim.province);
+            provinceRegions[claim.province].push_back(claim.region);
+            addFrontier(claim.province, claim.region, frontier);
         }
+    };
 
-        provinces.emplace_back(seed,
-                               std::move(provinceRegions),
-                               remainingScore);
+    auto seedRound = std::uint64_t{0};
+    while (unassignedLandCount > 0) {
+        const auto seeds = selectProvinceSeeds(
+            landGraph,
+            eligible,
+            seedMinimumDistance,
+            provinceCapacity,
+            generationSeed ^ mixSeed(seedRound));
+        if (seeds.empty()) {
+            throw std::logic_error(
+                "Province generation could not select an unassigned land seed.");
+        }
+        const auto countBeforeGrowth = unassignedLandCount;
+        ClaimQueue frontier;
+        addSeedBatch(seeds, frontier);
+        growSeedBatch(frontier);
+        if (unassignedLandCount >= countBeforeGrowth) {
+            throw std::logic_error(
+                "Province generation seed growth made no progress.");
+        }
+        ++seedRound;
+    }
+
+    std::vector<Province> provinces;
+    provinces.reserve(provinceSeeds.size());
+    for (std::size_t province = 0;
+         province < provinceSeeds.size();
+         ++province) {
+        provinces.emplace_back(provinceSeeds[province],
+                               std::move(provinceRegions[province]),
+                               remainingScores[province]);
     }
 
     provinces = mergeSmallProvinces(boundingBox,

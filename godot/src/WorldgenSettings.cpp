@@ -254,6 +254,12 @@ void WorldgenSettings::_bind_methods() {
         godot::D_METHOD("get_province_base_cost"),
         &WorldgenSettings::provinceBaseCost);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("set_province_seed_minimum_distance", "distance"),
+        &WorldgenSettings::setProvinceSeedMinimumDistance);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_province_seed_minimum_distance"),
+        &WorldgenSettings::provinceSeedMinimumDistance);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("set_province_minimum_region_count", "count"),
         &WorldgenSettings::setProvinceMinimumRegionCount);
     godot::ClassDB::bind_method(
@@ -531,6 +537,12 @@ void WorldgenSettings::_bind_methods() {
                                      godot::PROPERTY_HINT_RANGE,
                                      "0,1000,0.01,or_greater"),
                  "set_province_base_cost", "get_province_base_cost");
+    ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT,
+                                     "province_seed_minimum_distance",
+                                     godot::PROPERTY_HINT_RANGE,
+                                     "0,1000,0.01,or_greater"),
+                 "set_province_seed_minimum_distance",
+                 "get_province_seed_minimum_distance");
     ADD_PROPERTY(godot::PropertyInfo(godot::Variant::INT,
                                      "province_minimum_region_count",
                                      godot::PROPERTY_HINT_RANGE,
@@ -912,6 +924,14 @@ void WorldgenSettings::setProvinceBaseCost(double cost) {
 
 double WorldgenSettings::provinceBaseCost() const noexcept {
     return m_provinceBaseCost;
+}
+
+void WorldgenSettings::setProvinceSeedMinimumDistance(double distance) {
+    m_provinceSeedMinimumDistance = distance;
+}
+
+double WorldgenSettings::provinceSeedMinimumDistance() const noexcept {
+    return m_provinceSeedMinimumDistance;
 }
 
 void WorldgenSettings::setProvinceMinimumRegionCount(std::int64_t count) {

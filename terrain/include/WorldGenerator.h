@@ -55,6 +55,7 @@ struct WorldGenerationSettings {
     double provinceLandTypeContribution{5.0};
     double provinceShortBorderContribution{5.0};
     double provinceBaseCost{1.0};
+    double provinceSeedMinimumDistance{4.0};
     std::size_t provinceMinimumRegionCount{3};
     std::size_t provinceMaximumRegionCount{0};
 };

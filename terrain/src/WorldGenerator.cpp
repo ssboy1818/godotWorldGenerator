@@ -180,6 +180,11 @@ void validateSettings(const WorldGenerationSettings &settings) {
         throw std::invalid_argument(
             "Province base cost must be finite and non-negative.");
     }
+    if (!std::isfinite(settings.provinceSeedMinimumDistance)
+        || settings.provinceSeedMinimumDistance < 0.0) {
+        throw std::invalid_argument(
+            "Province seed minimum distance must be finite and non-negative.");
+    }
     if (!std::isfinite(settings.provinceBaseCost
                        + settings.provinceRiverContribution
                        + settings.provinceElevationContribution
@@ -631,7 +636,9 @@ World WorldGenerator::generate() const {
         m_settings.provinceMinimumRegionCount,
         m_settings.provinceShortBorderContribution,
         m_settings.provinceLandTypeContribution,
-        m_settings.provinceMaximumRegionCount);
+        m_settings.provinceMaximumRegionCount,
+        m_settings.provinceSeedMinimumDistance,
+        m_settings.seed);
 
     return World{boundingBox,
                  std::move(division),

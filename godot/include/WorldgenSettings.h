@@ -152,6 +152,9 @@ public:
     void setProvinceBaseCost(double cost);
     [[nodiscard]] double provinceBaseCost() const noexcept;
 
+    void setProvinceSeedMinimumDistance(double distance);
+    [[nodiscard]] double provinceSeedMinimumDistance() const noexcept;
+
     void setProvinceMinimumRegionCount(std::int64_t count);
     [[nodiscard]] std::int64_t provinceMinimumRegionCount() const noexcept;
 
@@ -208,6 +211,7 @@ private:
     double m_provinceLandTypeContribution{5.0};
     double m_provinceShortBorderContribution{5.0};
     double m_provinceBaseCost{1.0};
+    double m_provinceSeedMinimumDistance{4.0};
     std::int64_t m_provinceMinimumRegionCount{3};
     std::int64_t m_provinceMaximumRegionCount{0};
 };

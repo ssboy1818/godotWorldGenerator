@@ -140,6 +140,8 @@ namespace {
         .provinceShortBorderContribution =
             settings.provinceShortBorderContribution(),
         .provinceBaseCost = settings.provinceBaseCost(),
+        .provinceSeedMinimumDistance =
+            settings.provinceSeedMinimumDistance(),
         .provinceMinimumRegionCount =
             static_cast<std::size_t>(provinceMinimumRegionCount),
         .provinceMaximumRegionCount =
